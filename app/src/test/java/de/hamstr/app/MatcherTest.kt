@@ -6,6 +6,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import de.hamstr.app.UpdateNotifications.Notice
 import java.time.LocalDate
 
 class MatcherTest {
@@ -189,17 +190,17 @@ class MatcherTest {
         val day = 24L * 60 * 60 * 1000
         val n = UpdateNotifications
         // aktuell → nichts
-        assertEquals(n.Notice.NONE, n.decide(19, 19, 0, 0, 0, 10 * day))
+        assertEquals(Notice.NONE, n.decide(19, 19, 0, 0, 0, 10 * day))
         // neue Version → erste Meldung
-        assertEquals(n.Notice.FIRST, n.decide(20, 19, 19, 0, 0, 10 * day))
+        assertEquals(Notice.FIRST, n.decide(20, 19, 19, 0, 0, 10 * day))
         // schon gemeldet, erst 1 Tag her → nichts
-        assertEquals(n.Notice.NONE, n.decide(20, 19, 20, 10 * day, 0, 11 * day))
+        assertEquals(Notice.NONE, n.decide(20, 19, 20, 10 * day, 0, 11 * day))
         // nach 3 Tagen → eine Erinnerung
-        assertEquals(n.Notice.REMINDER, n.decide(20, 19, 20, 10 * day, 0, 13 * day))
+        assertEquals(Notice.REMINDER, n.decide(20, 19, 20, 10 * day, 0, 13 * day))
         // Erinnerung schon verschickt → nichts mehr
-        assertEquals(n.Notice.NONE, n.decide(20, 19, 20, 10 * day, 20, 30 * day))
+        assertEquals(Notice.NONE, n.decide(20, 19, 20, 10 * day, 20, 30 * day))
         // noch neuere Version → wieder erste Meldung
-        assertEquals(n.Notice.FIRST, n.decide(21, 19, 20, 10 * day, 20, 30 * day))
+        assertEquals(Notice.FIRST, n.decide(21, 19, 20, 10 * day, 20, 30 * day))
     }
 
     @Test fun dedupeAndMessage() {
