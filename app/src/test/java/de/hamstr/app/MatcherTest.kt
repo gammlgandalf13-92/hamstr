@@ -158,6 +158,28 @@ class MatcherTest {
         assertEquals("catalog", productFromCatalog(item).imageSource)
     }
 
+    @Test fun marketList() {
+        val found = listOf(
+            NearbyStore("Globus Bad Kissingen", "globus", 0.0, 0.0, 3.2, "Am Markt 1"),
+            NearbyStore("Lidl", "lidl", 0.0, 0.0, 1.1, ""),
+            NearbyStore("Lidl", "lidl", 0.0, 0.0, 4.0, ""),
+        )
+        val old = mapOf("tegut" to ChainInfo("tegut", 9.9, 1, "alt"))
+        val info = Markets.applyNearby(old, found)
+        assertEquals("Globus", info["globus"]!!.label)
+        assertEquals(2, info["lidl"]!!.count)
+        assertEquals(1.1, info["lidl"]!!.distanceKm!!, 0.001)
+        assertNull(info["tegut"]!!.distanceKm)            // alte Entfernung verworfen, Eintrag bleibt
+        assertEquals("Lidl", Markets.label("lidl", info))
+
+        val order = Markets.ordered(info, setOf("rewe", "tegut"))
+        assertEquals(listOf("lidl", "globus"), order.take(2))  // Ketten im Umkreis zuerst, nach Entfernung
+        assertEquals("rewe", order[2])                         // dann Standard-Ketten
+        assertEquals("tegut", order.last())                    // eigene ganz unten
+        assertEquals("Globus", Markets.labelFor("Globus Bad Kissingen", "globus"))
+        assertEquals("Edeka", Markets.labelFor("Marktkauf", "edeka"))
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

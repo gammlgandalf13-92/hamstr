@@ -36,6 +36,30 @@ class Store(context: Context) {
         get() = prefs.getInt("updateNotified", 0)
         set(v) = prefs.edit().putInt("updateNotified", v).apply()
 
+    /** Ketten der Märkteliste (eigene + aus der Umkreissuche) mit Entfernung. */
+    fun chains(): Map<String, ChainInfo> {
+        val raw = prefs.getString("chains", null) ?: return emptyMap()
+        val o = JSONObject(raw)
+        return o.keys().asSequence().associateWith { k ->
+            val c = o.getJSONObject(k)
+            ChainInfo(
+                label = c.optString("label"),
+                distanceKm = if (c.has("km")) c.optDouble("km") else null,
+                count = c.optInt("count"),
+                address = c.optString("address"),
+            )
+        }
+    }
+
+    fun saveChains(map: Map<String, ChainInfo>) {
+        val o = JSONObject()
+        map.forEach { (k, c) ->
+            o.put(k, JSONObject().put("label", c.label).put("count", c.count).put("address", c.address)
+                .apply { c.distanceKm?.let { put("km", it) } })
+        }
+        prefs.edit().putString("chains", o.toString()).apply()
+    }
+
     /** Stammt der Mittelpunkt vom Standort (true) oder von der PLZ (false)? */
     var centerIsLocation: Boolean
         get() = prefs.getBoolean("centerIsLocation", false)

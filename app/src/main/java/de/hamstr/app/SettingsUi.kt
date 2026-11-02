@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,13 +70,12 @@ fun SettingsScreen(store: Store) {
     val scope = rememberCoroutineScope()
 
     var plz by remember { mutableStateOf(store.plz) }
-    var stores by remember { mutableStateOf(store.stores.joinToString(", ")) }
     var hour by remember { mutableStateOf(store.hour.toString()) }
     var radius by remember { mutableFloatStateOf(store.radiusKm.toFloat()) }
     var center by remember { mutableStateOf(store.center?.let { it.first to it.second }) }
     var centerIsLocation by remember { mutableStateOf(store.centerIsLocation) }
     var nearby by remember { mutableStateOf<List<NearbyStore>?>(null) }
-    var chosen by remember { mutableStateOf(store.stores.toSet()) }
+    var chainsVersion by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var saved by remember { mutableStateOf(false) }
@@ -88,7 +88,6 @@ fun SettingsScreen(store: Store) {
 
     fun saveAll() {
         store.plz = plz.trim()
-        store.stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) }.ifEmpty { Store.DEFAULT_STORES }
         store.hour = hourValue ?: 7
         store.radiusKm = radius.roundToInt()
         center?.let { store.center = Triple(it.first, it.second, plz.trim()) }
@@ -141,6 +140,8 @@ fun SettingsScreen(store: Store) {
                     store.center = Triple(c.first, c.second, plz.trim())
                     val found = withContext(Dispatchers.IO) { Geo.nearbyStores(c.first, c.second, radius.roundToInt()) }
                     nearby = found
+                    store.saveChains(Markets.applyNearby(store.chains(), found))
+                    chainsVersion++
                     if (found.isEmpty()) message = "Keine Supermärkte im Umkreis gefunden – Radius vergrößern?"
                 }
             } catch (e: Exception) {
@@ -199,19 +200,7 @@ fun SettingsScreen(store: Store) {
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
 
-        nearby?.takeIf { it.isNotEmpty() }?.let { list ->
-            NearbyChains(list, chosen) { chain, on -> chosen = if (on) chosen + chain else chosen - chain }
-            TextButton(onClick = {
-                stores = chosen.sorted().joinToString(", ")
-                saved = false
-            }, enabled = chosen.isNotEmpty()) { Text("Auswahl als meine Märkte übernehmen") }
-        }
-
-        OutlinedTextField(
-            value = stores, onValueChange = { stores = it; saved = false }, label = { Text("Meine Märkte") },
-            supportingText = { Text("Mit Komma trennen. „aldi“ = Süd + Nord, „edeka“ = alle EDEKA-Varianten.") },
-            modifier = Modifier.fillMaxWidth(),
-        )
+        MarketList(store, chainsVersion)
 
         // ---------------- Wann
         HorizontalDivider()
@@ -330,34 +319,6 @@ private fun UpdateSection(store: Store) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
     }
     status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-}
-
-/** Ketten im Umkreis, gruppiert, mit Häkchen. */
-@Composable
-private fun NearbyChains(list: List<NearbyStore>, chosen: Set<String>, onToggle: (String, Boolean) -> Unit) {
-    val groups = list.filter { it.chain.isNotBlank() }.groupBy { it.chain }
-        .toList().sortedBy { (_, s) -> s.minOf { it.distanceKm } }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 6.dp)) {
-            Text("Gefunden: ${list.size} Märkte", style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
-            groups.forEach { (chain, shops) ->
-                val nearest = shops.minBy { it.distanceKm }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Checkbox(checked = chain in chosen, onCheckedChange = { onToggle(chain, it) })
-                    Column {
-                        val count = if (shops.size == 1) "1 Filiale" else "${shops.size} Filialen"
-                        Text("${nearest.name} · $count", fontWeight = FontWeight.Medium)
-                        Text(
-                            "nächste ${"%.1f".format(Locale.GERMANY, nearest.distanceKm)} km" +
-                                (if (nearest.address.isNotBlank()) " · ${nearest.address}" else ""),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** OpenStreetMap-Karte mit Umkreis und Märkten. */
