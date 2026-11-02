@@ -80,7 +80,12 @@ class MatcherTest {
     }
 
     @Test fun categoryWithExclusions() {
-        val beeren = Store.EXAMPLES[1]
+        val beeren = Product(
+            id = "beeren",
+            names = listOf("Beerenmisch", "Beerenmix", "Beeren Mix", "Waldbeeren", "Beeren Mischung"),
+            queries = listOf("Beerenmischung", "Beerenmix", "Waldbeeren"),
+            exclude = listOf("Joghurt", "Eis", "Smoothie", "Müsli", "Saft", "Konfitüre", "Kuchen", "Tee", "Quark"),
+        )
         for (d in listOf("Beerenmischung tiefgefroren 750 g", "TK-Beeren-Mix 1 kg", "Waldbeeren 500 g")) {
             assertNotNull(d, hit(beeren, offer("1", "Lidl", "lidl", "Freshona", "", d, 2.99)))
         }

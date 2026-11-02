@@ -86,11 +86,8 @@ class Store(context: Context) {
 
     // ---------------- Produkte ----------------
     fun products(): List<Product> {
-        val raw = prefs.getString("products", null)
-        if (raw == null) {
-            saveProducts(EXAMPLES)
-            return EXAMPLES
-        }
+        // Neue Installation: leere Liste – jeder legt seine eigenen Produkte an
+        val raw = prefs.getString("products", null) ?: return emptyList()
         val arr = JSONArray(raw)
         return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(::productFrom) }
     }
@@ -205,15 +202,5 @@ class Store(context: Context) {
 
         fun splitList(text: String, sep: String): List<String> =
             text.split(sep).map { it.trim() }.filter { it.isNotEmpty() }
-
-        val EXAMPLES = listOf(
-            Product(id = UUID.randomUUID().toString(), brand = "Planted"),
-            Product(
-                id = UUID.randomUUID().toString(),
-                names = listOf("Beerenmisch", "Beerenmix", "Beeren Mix", "Waldbeeren", "Beeren Mischung"),
-                queries = listOf("Beerenmischung", "Beerenmix", "Waldbeeren"),
-                exclude = listOf("Joghurt", "Eis", "Smoothie", "Müsli", "Saft", "Konfitüre", "Kuchen", "Tee", "Quark"),
-            ),
-        )
     }
 }
