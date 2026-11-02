@@ -51,6 +51,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.Job
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -89,8 +95,37 @@ fun ProductsScreen(store: Store) {
     var isNew by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
     var tip by remember { mutableStateOf<String?>(null) }
+    var confirmDelete by remember { mutableStateOf<Product?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    var undoJob by remember { mutableStateOf<Job?>(null) }
 
     fun persist() = store.saveProducts(products.toList())
+
+    /** Entfernen mit 5 Sekunden Rückgängig. Das Bild wird erst danach gelöscht. */
+    fun delete(p: Product) {
+        val index = products.indexOfFirst { it.id == p.id }
+        if (index < 0) return
+        products.removeAt(index)
+        persist()
+        undoJob?.cancel()
+        undoJob = scope.launch {
+            var restored = false
+            try {
+                val name = p.label.ifBlank { "Produkt" }
+                val result = withTimeoutOrNull(5_000) {
+                    snackbar.showSnackbar("„$name“ entfernt", actionLabel = "Rückgängig", duration = SnackbarDuration.Indefinite)
+                }
+                if (result == SnackbarResult.ActionPerformed) {
+                    products.add(index.coerceAtMost(products.size), p)
+                    persist()
+                    restored = true
+                }
+            } finally {
+                // showSnackbar räumt bei Zeitablauf/Abbruch selbst auf
+                if (!restored) Images.delete(ctx, p.id)
+            }
+        }
+    }
 
     fun save(p: Product) {
         val i = products.indexOfFirst { it.id == p.id }
@@ -163,6 +198,7 @@ fun ProductsScreen(store: Store) {
                 onClick = { searching = true },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             ) { Text("+", fontSize = 26.sp) }
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp))
         }
     }
 
@@ -175,13 +211,24 @@ fun ProductsScreen(store: Store) {
             onDismiss = { editing = null },
             onSave = { save(it); editing = null },
             onDelete = if (isNew) null else {
-                {
-                    products.removeAll { it.id == current.id }
-                    Images.delete(ctx, current.id)
-                    persist()
-                    editing = null
-                }
+                { confirmDelete = current }
             },
+        )
+    }
+
+    confirmDelete?.let { p ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text("Produkt entfernen?") },
+            text = { Text("„${p.label.ifBlank { "Produkt" }}“ wird nicht mehr beobachtet.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = null
+                    editing = null
+                    delete(p)
+                }) { Text("Entfernen", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Abbrechen") } },
         )
     }
 }
