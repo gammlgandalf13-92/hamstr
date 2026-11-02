@@ -90,6 +90,21 @@ class MatcherTest {
         assertNotNull(hit(beeren, offer("3", "ALDI SÜD", "aldi-sued", "", "", "Beerenmischung 1 kg, Aktionspreis", 3.49)))
     }
 
+    @Test fun chainKeys() {
+        assertEquals("aldi", Geo.chainKey("ALDI SÜD"))
+        assertEquals("aldi", Geo.chainKey("Aldi Nord"))
+        assertEquals("edeka", Geo.chainKey("E center"))
+        assertEquals("edeka", Geo.chainKey("EDEKA Müller"))
+        assertEquals("netto", Geo.chainKey("Netto Marken-Discount"))
+        assertEquals("rewe", Geo.chainKey("REWE City"))
+        assertEquals("norma", Geo.chainKey("Norma"))
+        // Bad Kissingen → Schweinfurt ≈ 20 km
+        assertEquals(20.0, Geo.distanceKm(50.2, 10.07, 50.05, 10.23), 2.0)
+        // Ketten-Kurznamen passen zum Märkte-Filter
+        assertTrue(Matcher.storeAllowed(
+            Offer("1", "ALDI SÜD", "aldi-sued", "", "", "", 1.0, null, "", "", ""), listOf(Geo.chainKey("ALDI SÜD"))))
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

@@ -31,6 +31,25 @@ class Store(context: Context) {
         get() = prefs.getInt("hour", 7)
         set(v) = prefs.edit().putInt("hour", v.coerceIn(0, 23)).apply()
 
+    var radiusKm: Int
+        get() = prefs.getInt("radiusKm", 5)
+        set(v) = prefs.edit().putInt("radiusKm", v.coerceIn(1, 25)).apply()
+
+    /** Mittelpunkt für Karte und Umkreis (aus Standort oder PLZ) – samt der PLZ, zu der er gehört. */
+    var center: Triple<Double, Double, String>?
+        get() {
+            val lat = prefs.getString("centerLat", null)?.toDoubleOrNull() ?: return null
+            val lon = prefs.getString("centerLon", null)?.toDoubleOrNull() ?: return null
+            return Triple(lat, lon, prefs.getString("centerPlz", "").orEmpty())
+        }
+        set(v) {
+            val e = prefs.edit()
+            if (v == null) e.remove("centerLat").remove("centerLon").remove("centerPlz")
+            else e.putString("centerLat", v.first.toString()).putString("centerLon", v.second.toString())
+                .putString("centerPlz", v.third)
+            e.apply()
+        }
+
     // ---------------- Produkte ----------------
     fun products(): List<Product> {
         val raw = prefs.getString("products", null)
