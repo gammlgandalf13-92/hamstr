@@ -22,12 +22,18 @@ object Checker {
         if (!Regex("\\d{5}").matches(plz)) {
             log.append("Keine gültige PLZ eingetragen – bitte in den Einstellungen ergänzen.\n")
             st.log = log.toString()
+            st.lastStatus = "no_plz"
+            st.saveHits(emptyList())
+            st.lastRun = System.currentTimeMillis()
             return Summary(0, 0, 0, 1)
         }
         val products = st.products()
         if (products.isEmpty()) {
             log.append("Keine Produkte eingetragen.\n")
             st.log = log.toString()
+            st.lastStatus = "no_products"
+            st.saveHits(emptyList())
+            st.lastRun = System.currentTimeMillis()
             return Summary(0, 0, 0, 0)
         }
 
@@ -105,6 +111,11 @@ object Checker {
         if (errors > 0) log.append(", $errors Fehler")
         log.append(".\n")
         st.log = log.toString()
+        st.lastStatus = when {
+            errors == products.size -> "failed"
+            errors > 0 -> "partial"
+            else -> "ok"
+        }
         st.lastRun = System.currentTimeMillis()
         checkForUpdate(context, st)
         return Summary(products.size, best.size, fresh.size, errors)

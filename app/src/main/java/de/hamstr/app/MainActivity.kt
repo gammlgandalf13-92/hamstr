@@ -147,6 +147,8 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
     val ctx = LocalContext.current
     val hits = remember(version) { store.hits() }
     val log = remember(version) { store.log }
+    val status = remember(version) { store.lastStatus }
+    val logEnabled = remember { store.showLog }
     val lastRun = remember(version) { store.lastRun }
     var showLog by rememberSaveable { mutableStateOf(false) }
 
@@ -166,8 +168,19 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        if (hits.isEmpty() && lastRun != 0L) {
-            item { Text("Gerade ist keines deiner Produkte im Angebot.", style = MaterialTheme.typography.bodyLarge) }
+        // Verständliche Meldung statt Technik
+        val notice = when (status) {
+            "no_plz" -> "Bitte trag in den Einstellungen deine PLZ ein, damit Hamstr Angebote in deiner Region findet."
+            "no_products" -> "Leg unter „Produkte“ fest, was Hamstr für dich beobachten soll."
+            "failed" -> "Angebote konnten gerade nicht abgerufen werden. Bitte später noch einmal prüfen."
+            else -> if (hits.isEmpty() && lastRun != 0L) "Keine aktuellen Angebote zu deinen Produkten gefunden." else null
+        }
+        notice?.let { item { Text(it, style = MaterialTheme.typography.bodyLarge) } }
+        if (status == "partial" && hits.isNotEmpty()) {
+            item {
+                Text("Einige Produkte konnten nicht geprüft werden – die Liste ist evtl. unvollständig.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
         }
         items(hits) { h ->
             Card(Modifier.fillMaxWidth().clickable {
@@ -184,7 +197,7 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
                 }
             }
         }
-        if (log.isNotBlank()) {
+        if (logEnabled && log.isNotBlank()) {
             item {
                 TextButton(onClick = { showLog = !showLog }) {
                     Text(if (showLog) "Prüfprotokoll ausblenden" else "Prüfprotokoll anzeigen")

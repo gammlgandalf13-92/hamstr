@@ -80,6 +80,7 @@ fun SettingsScreen(store: Store) {
     var message by remember { mutableStateOf<String?>(null) }
     var saved by remember { mutableStateOf(false) }
     var resetDone by remember { mutableStateOf(false) }
+    var showLog by remember { mutableStateOf(store.showLog) }
 
     val plzOk = Regex("\\d{5}").matches(plz.trim())
     val hourValue = hour.trim().toIntOrNull()
@@ -236,6 +237,16 @@ fun SettingsScreen(store: Store) {
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedButton(onClick = { openAppSettings(ctx) }) { Text("App-Einstellungen öffnen") }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Prüfprotokoll anzeigen", fontWeight = FontWeight.Bold)
+                Text("Technische Details zur letzten Prüfung auf der Treffer-Seite – nur für die Fehlersuche.",
+                    style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.size(8.dp))
+            androidx.compose.material3.Switch(checked = showLog, onCheckedChange = { showLog = it; store.showLog = it })
+        }
 
         Text("Meldungen", fontWeight = FontWeight.Bold)
         Text("Jedes Angebot wird nur einmal gemeldet. Zum Testen kannst du das zurücksetzen.",

@@ -120,6 +120,16 @@ class Store(context: Context) {
         get() = prefs.getString("log", "").orEmpty()
         set(v) = prefs.edit().putString("log", v).apply()
 
+    /** Ergebnis der letzten Prüfung für die Anzeige: ok, no_plz, no_products, failed, partial */
+    var lastStatus: String
+        get() = prefs.getString("lastStatus", "").orEmpty()
+        set(v) = prefs.edit().putString("lastStatus", v).apply()
+
+    /** Prüfprotokoll auf der Treffer-Seite zeigen (nur für die Fehlersuche). */
+    var showLog: Boolean
+        get() = prefs.getBoolean("showLog", false)
+        set(v) = prefs.edit().putBoolean("showLog", v).apply()
+
     var lastRun: Long
         get() = prefs.getLong("lastRun", 0L)
         set(v) = prefs.edit().putLong("lastRun", v).apply()
