@@ -214,6 +214,10 @@ fun SettingsScreen(store: Store) {
         Button(enabled = plzOk && hourOk, onClick = { saveAll() }) { Text("Speichern") }
         if (saved) Text("Gespeichert. Nächster Check täglich gegen ${store.hour}:15 Uhr.")
 
+        // ---------------- Updates
+        HorizontalDivider()
+        UpdateSection(store)
+
         // ---------------- Sonstiges
         HorizontalDivider()
         Text("Zuverlässigkeit", fontWeight = FontWeight.Bold)
@@ -235,6 +239,100 @@ fun SettingsScreen(store: Store) {
             "Angebote: Marktguru · Karte & Märkte: © OpenStreetMap-Mitwirkende · Version ${appVersion(ctx)}",
             style = MaterialTheme.typography.bodySmall,
         )
+    }
+}
+
+/** Updates aus den GitHub-Releases: prüfen, herunterladen, installieren. */
+@Composable
+private fun UpdateSection(store: Store) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val current = remember { Updater.currentVersion(ctx) }
+    var latest by remember { mutableStateOf<UpdateInfo?>(null) }
+    var checked by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var progress by remember { mutableFloatStateOf(0f) }
+    var showToken by remember { mutableStateOf(store.githubToken.isNotBlank()) }
+    var token by remember { mutableStateOf(store.githubToken) }
+
+    fun check() {
+        busy = true
+        status = null
+        scope.launch {
+            try {
+                latest = withContext(Dispatchers.IO) { Updater.latest(store.githubToken) }
+                checked = true
+                if (latest == null) status = "Noch keine Version mit APK veröffentlicht."
+            } catch (e: Exception) {
+                status = e.message ?: "Prüfung fehlgeschlagen."
+            }
+            busy = false
+        }
+    }
+
+    fun installLatest(info: UpdateInfo) {
+        if (!Updater.canInstall(ctx)) {
+            status = "Bitte erlaube Hamstr einmalig, Apps zu installieren – danach erneut tippen."
+            Updater.openInstallPermission(ctx)
+            return
+        }
+        busy = true
+        progress = 0f
+        status = "Lade herunter…"
+        scope.launch {
+            try {
+                val apk = withContext(Dispatchers.IO) {
+                    Updater.download(ctx, info, store.githubToken) { p -> progress = p }
+                }
+                status = "Installation wird gestartet…"
+                Updater.install(ctx, apk)
+            } catch (e: Exception) {
+                status = e.message ?: "Download fehlgeschlagen."
+            }
+            busy = false
+        }
+    }
+
+    Text("Updates", fontWeight = FontWeight.Bold)
+    Text("Installiert: Version 1.0.$current", style = MaterialTheme.typography.bodySmall)
+
+    val info = latest
+    when {
+        info != null && info.version > current -> {
+            Text("Neu: ${info.name}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
+            Button(onClick = { installLatest(info) }, enabled = !busy) { Text("Herunterladen und installieren") }
+        }
+        checked && info != null -> Text("Du hast die neueste Version.", style = MaterialTheme.typography.bodySmall)
+    }
+    OutlinedButton(onClick = { check() }, enabled = !busy) { Text("Nach Updates suchen") }
+    if (busy && progress > 0f) {
+        androidx.compose.material3.LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+    } else if (busy) {
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+    }
+    status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+
+    TextButton(onClick = { showToken = !showToken }) {
+        Text(if (showToken) "▲ Zugang zu privatem Repo" else "▼ Zugang zu privatem Repo")
+    }
+    if (showToken) {
+        Text(
+            "Nur nötig, wenn das Repo ${BuildConfig.UPDATE_REPO} privat ist: GitHub-Token mit Lesezugriff " +
+                "(„Contents: Read“) auf dieses Repo eintragen.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(
+            value = token,
+            onValueChange = { token = it.trim() },
+            label = { Text("GitHub-Token") },
+            singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        TextButton(onClick = { store.githubToken = token; status = "Token gespeichert."; check() }) {
+            Text("Token speichern und prüfen")
+        }
     }
 }
 

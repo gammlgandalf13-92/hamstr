@@ -21,6 +21,9 @@ android {
         targetSdk = 35
         versionCode = buildNumber
         versionName = "1.0.$buildNumber"
+        // Repo, aus dem Updates geholt werden – beim Build in GitHub Actions automatisch das eigene
+        val updateRepo = System.getenv("GITHUB_REPOSITORY") ?: "gammlgandalf13-92/hamstr"
+        buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
     }
 
     signingConfigs {
@@ -50,6 +53,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     lint {
         abortOnError = false

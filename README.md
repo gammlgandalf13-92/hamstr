@@ -11,7 +11,10 @@ im Prospekt sind. Läuft komplett auf dem Handy – kein Server, kein Konto.
 3. Hamstr öffnen, Benachrichtigungen erlauben, unter **Einstellungen** die PLZ eintragen.
 4. Unter **Produkte** deine Artikel anlegen, dann auf **Treffer → Jetzt prüfen**.
 
-Updates: neue APK genauso installieren – Einstellungen und Produkte bleiben erhalten.
+Updates: in der App unter **Einstellungen → Updates → Nach Updates suchen**. Hamstr meldet neue Versionen
+außerdem beim täglichen Check. Einstellungen und Produkte bleiben bei Updates erhalten.
+Ist dieses Repo privat, braucht die Update-Funktion einen GitHub-Token mit Lesezugriff (in der App unter
+„Zugang zu privatem Repo“); bei einem öffentlichen Repo geht es ohne.
 
 ## Produkte eintragen
 
