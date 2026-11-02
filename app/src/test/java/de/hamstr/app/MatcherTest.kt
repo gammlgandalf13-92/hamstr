@@ -140,6 +140,24 @@ class MatcherTest {
         assertTrue(Checker.imageUpgrades(products, unsure).isEmpty())
     }
 
+    @Test fun catalogPrefersOfferImage() {
+        val item = CatalogItem("1", "Nutella", "Ferrero", "450 g", "https://off/foto.jpg")
+        val nutellaOffer = Offer("9", "REWE", "rewe", "Nutella", "Ferrero", "je 450-g-Glas", 2.99, null,
+            "2026-11-02", "2026-11-07", "", "https://cdn/prospekt.webp")
+        val kinderOffer = nutellaOffer.copy(productName = "Kinder Country", description = "9er-Pckg.")
+        val bigJar = nutellaOffer.copy(description = "je 1-kg-Glas")
+
+        val up = withOfferImage(item, listOf(kinderOffer, nutellaOffer), today)
+        assertEquals("https://cdn/prospekt.webp", up.image)
+        assertTrue(up.imageFromOffer)
+        assertEquals("offer", productFromCatalog(up).imageSource)
+
+        // gleiche Marke, anderes Produkt bzw. andere Größe: Katalogfoto bleibt
+        assertEquals(item, withOfferImage(item, listOf(kinderOffer), today))
+        assertEquals(item, withOfferImage(item, listOf(bigJar), today))
+        assertEquals("catalog", productFromCatalog(item).imageSource)
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

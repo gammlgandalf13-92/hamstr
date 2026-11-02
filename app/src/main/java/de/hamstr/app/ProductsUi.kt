@@ -54,6 +54,7 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import java.util.Locale
 import java.util.UUID
 
@@ -214,13 +215,32 @@ private fun productFromOffer(o: Offer): Product = Product(
 )
 
 /** Vorschlag aus dem Katalog (Open Food Facts). */
-private fun productFromCatalog(c: CatalogItem): Product = Product(
+/**
+ * Ist dasselbe Produkt gerade im Prospekt? Dann dessen Bild verwenden statt des Katalogfotos.
+ * Marke, Name und Größe müssen passen – ein beliebiges Produkt derselben Marke reicht nicht.
+ */
+internal fun withOfferImage(c: CatalogItem, offers: List<Offer>, today: LocalDate = LocalDate.now()): CatalogItem {
+    if (offers.isEmpty()) return c
+    val probe = productFromCatalog(c)
+    if (probe.names.isEmpty()) return c
+    val best = offers.filter { it.imageUrl.isNotBlank() }
+        .mapNotNull { Matcher.match(probe, it, emptyList(), today) }
+        .filter { it.confidence >= 0.7 && it.notes.none { n -> n.startsWith("Größe abweichend") } }
+        .maxByOrNull { it.confidence } ?: return c
+    return c.copy(image = best.offer.imageUrl, imageFromOffer = true)
+}
+
+internal fun productFromCatalog(c: CatalogItem): Product = Product(
     id = UUID.randomUUID().toString(),
     names = listOf(nameWithoutBrand(c.name, c.brand)).filter { it.isNotBlank() },
     brand = c.brand,
     size = sizeText(c.quantity),
     image = c.image,
-    imageSource = if (c.image.isNotBlank()) "catalog" else "",
+    imageSource = when {
+        c.image.isBlank() -> ""
+        c.imageFromOffer -> "offer"
+        else -> "catalog"
+    },
 )
 
 // ------------------------------------------------------------------ Suche
@@ -283,6 +303,8 @@ fun SearchScreen(
         }
     }
 
+    // Katalog-Produkte, die gerade im Prospekt sind, bekommen dessen Bild
+    val catalogShown = remember(catalog, offers) { catalog.orEmpty().map { withOfferImage(it, offers.orEmpty()) } }
     val shownOffers = offers?.let { list -> if (onlyMine) list.filter { Matcher.storeAllowed(it, myStores) } else list }
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -346,12 +368,12 @@ fun SearchScreen(
             if (!loadingCatalog && catalogError == null && catalog.isNullOrEmpty()) {
                 item { Hint("Nichts gefunden – anders schreiben oder „Ohne Suche anlegen“.") }
             }
-            items(catalog.orEmpty(), key = { "c|" + it.code + "|" + it.displayName }) { c ->
+            items(catalogShown, key = { "c|" + it.code + "|" + it.displayName }) { c ->
                 ResultCard(
                     image = c.image,
                     title = c.displayName,
                     subtitle = c.quantity,
-                    footer = "Beobachten",
+                    footer = if (c.imageFromOffer) "Gerade im Prospekt · Beobachten" else "Beobachten",
                     onClick = { onPickCatalog(c) },
                 )
             }

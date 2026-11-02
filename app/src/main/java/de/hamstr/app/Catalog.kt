@@ -14,6 +14,7 @@ data class CatalogItem(
     val brand: String,
     val quantity: String,
     val image: String,
+    val imageFromOffer: Boolean = false,   // Bild stammt aus einem aktuellen Prospekt
 ) {
     val displayName: String
         get() = if (brand.isNotBlank() && !name.startsWith(brand, ignoreCase = true)) "$brand $name" else name
