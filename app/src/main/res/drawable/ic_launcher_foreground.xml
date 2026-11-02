@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hamster-Gesicht: Ohren, Kopf, Pausbacken, Augen, Nase -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Ohren -->
+    <path android:fillColor="#8B5A2B" android:pathData="M30,40a8,8 0 1,0 16,0a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#8B5A2B" android:pathData="M62,40a8,8 0 1,0 16,0a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#E8A0A0" android:pathData="M34,40a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+    <path android:fillColor="#E8A0A0" android:pathData="M66,40a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
+    <!-- Kopf -->
+    <path android:fillColor="#8B5A2B" android:pathData="M30,60a24,22 0 1,0 48,0a24,22 0 1,0 -48,0" />
+    <!-- Pausbacken -->
+    <path android:fillColor="#F2D2A9" android:pathData="M30,66a10,9 0 1,0 20,0a10,9 0 1,0 -20,0" />
+    <path android:fillColor="#F2D2A9" android:pathData="M58,66a10,9 0 1,0 20,0a10,9 0 1,0 -20,0" />
+    <!-- Augen -->
+    <path android:fillColor="#222222" android:pathData="M43,55a3,3 0 1,0 6,0a3,3 0 1,0 -6,0" />
+    <path android:fillColor="#222222" android:pathData="M59,55a3,3 0 1,0 6,0a3,3 0 1,0 -6,0" />
+    <!-- Nase -->
+    <path android:fillColor="#E8A0A0" android:pathData="M51.5,63a2.5,2 0 1,0 5,0a2.5,2 0 1,0 -5,0" />
+</vector>
