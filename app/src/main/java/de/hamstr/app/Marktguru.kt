@@ -79,6 +79,22 @@ object Marktguru {
         return if (v.isNaN() || v == 0.0) null else v
     }
 
+    /** Bild-URL aus der Antwort (images.urls) – sonst das feste CDN-Muster über die Angebotsnummer. */
+    private fun imageUrl(r: JSONObject, id: String): String {
+        val urls = r.optJSONObject("images")?.optJSONObject("urls")
+        val direct = listOf("medium", "small", "large").map { str(urls, it) }.firstOrNull { it.isNotBlank() }
+        if (direct != null) {
+            return when {
+                direct.startsWith("//") -> "https:$direct"
+                direct.startsWith("/") -> "https://cdn.marktguru.de$direct"
+                else -> direct
+            }
+        }
+        val count = r.optJSONObject("images")?.optInt("count", -1) ?: -1
+        if (id.isBlank() || count == 0) return ""
+        return "https://cdn.marktguru.de/api/v1/offers/$id/images/default/0/small.webp"
+    }
+
     fun parse(json: String): List<Offer> {
         val results: JSONArray = JSONObject(json).optJSONArray("results") ?: return emptyList()
         val offers = mutableListOf<Offer>()
@@ -92,6 +108,7 @@ object Marktguru {
             }
             val validity = r.optJSONArray("validityDates")?.optJSONObject(0)
             val id = r.opt("id")?.toString().orEmpty()
+            val image = imageUrl(r, id)
             val advertisers = r.optJSONArray("advertisers")
             val advList = if (advertisers != null && advertisers.length() > 0)
                 (0 until advertisers.length()).mapNotNull { advertisers.optJSONObject(it) }
@@ -110,6 +127,7 @@ object Marktguru {
                     validFrom = str(validity, "from").take(10),
                     validTo = str(validity, "to").take(10),
                     url = OFFER_URL + id,
+                    imageUrl = image,
                 )
             }
         }

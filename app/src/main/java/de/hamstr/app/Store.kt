@@ -11,6 +11,7 @@ data class SavedHit(
     val body: String,
     val url: String,
     val validTo: String,
+    val image: String = "",
 )
 
 /** Alles, was Hamstr sich merkt – lokal auf dem Handy (SharedPreferences als JSON). */
@@ -70,7 +71,8 @@ class Store(context: Context) {
         val arr = JSONArray(prefs.getString("hits", "[]"))
         return (0 until arr.length()).mapNotNull { i ->
             arr.optJSONObject(i)?.let {
-                SavedHit(it.optString("title"), it.optString("body"), it.optString("url"), it.optString("validTo"))
+                SavedHit(it.optString("title"), it.optString("body"), it.optString("url"),
+                    it.optString("validTo"), it.optString("image"))
             }
         }
     }
@@ -79,7 +81,8 @@ class Store(context: Context) {
         val arr = JSONArray()
         hits.forEach {
             arr.put(JSONObject().put("title", it.title()).put("body", it.body())
-                .put("url", it.offer.url).put("validTo", it.offer.validTo))
+                .put("url", it.offer.url).put("validTo", it.offer.validTo)
+                .put("image", it.offer.imageUrl.ifBlank { it.product.image }))
         }
         prefs.edit().putString("hits", arr.toString()).apply()
     }
@@ -110,6 +113,7 @@ class Store(context: Context) {
         .put("queries", JSONArray(p.queries))
         .put("exclude", JSONArray(p.exclude))
         .put("stores", JSONArray(p.stores))
+        .put("image", p.image)
         .apply { p.maxPrice?.let { put("maxPrice", it) } }
 
     private fun productFrom(o: JSONObject): Product {
@@ -127,6 +131,7 @@ class Store(context: Context) {
             exclude = list("exclude"),
             maxPrice = if (o.has("maxPrice")) o.optDouble("maxPrice") else null,
             stores = list("stores"),
+            image = o.optString("image"),
         )
     }
 

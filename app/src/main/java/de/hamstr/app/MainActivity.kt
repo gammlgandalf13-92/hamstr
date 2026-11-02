@@ -171,10 +171,14 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
             Card(Modifier.fillMaxWidth().clickable {
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
             }) {
-                Column(Modifier.padding(14.dp)) {
-                    Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(4.dp))
-                    Text(h.body, style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.padding(12.dp)) {
+                    ProductImage(h.image, 72.dp)
+                    Spacer(Modifier.size(12.dp))
+                    Column {
+                        Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(4.dp))
+                        Text(h.body, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
             }
         }
@@ -187,134 +191,6 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
             }
         }
     }
-}
-
-// ------------------------------------------------------------------ Produkte
-@Composable
-fun ProductsScreen(store: Store) {
-    val products = remember { mutableStateListOf<Product>().apply { addAll(store.products()) } }
-    var editing by remember { mutableStateOf<Product?>(null) }
-    var creating by remember { mutableStateOf(false) }
-
-    fun persist() = store.saveProducts(products.toList())
-
-    Box(Modifier.fillMaxSize()) {
-        LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (products.isEmpty()) item { Text("Noch keine Produkte. Tippe auf +, um eins hinzuzufügen.") }
-            items(products, key = { it.id }) { p ->
-                Card(Modifier.fillMaxWidth().clickable { editing = p }) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(p.label.ifBlank { "(ohne Namen)" }, fontWeight = FontWeight.Bold)
-                        val details = buildList {
-                            if (p.names.isEmpty()) add("alle Artikel der Marke")
-                            if (p.size.isNotBlank()) add(p.size + if (p.exact) " (exakt)" else "")
-                            p.maxPrice?.let { add("bis ${Matcher.euro(it)}") }
-                            if (p.stores.isNotEmpty()) add(p.stores.joinToString(", "))
-                            if (p.exclude.isNotEmpty()) add("ohne: " + p.exclude.joinToString(", "))
-                        }
-                        if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-            }
-        }
-        FloatingActionButton(
-            onClick = { creating = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-        ) { Text("+", fontSize = 26.sp) }
-    }
-
-    val current = editing
-    if (current != null || creating) {
-        ProductDialog(
-            initial = current,
-            onDismiss = { editing = null; creating = false },
-            onSave = { p ->
-                val i = products.indexOfFirst { it.id == p.id }
-                if (i >= 0) products[i] = p else products.add(p)
-                persist(); editing = null; creating = false
-            },
-            onDelete = current?.let { c ->
-                { products.removeAll { it.id == c.id }; persist(); editing = null }
-            },
-        )
-    }
-}
-
-@Composable
-fun ProductDialog(initial: Product?, onDismiss: () -> Unit, onSave: (Product) -> Unit, onDelete: (() -> Unit)?) {
-    var names by remember { mutableStateOf(initial?.names?.joinToString(" | ").orEmpty()) }
-    var brand by remember { mutableStateOf(initial?.brand.orEmpty()) }
-    var size by remember { mutableStateOf(initial?.size.orEmpty()) }
-    var exact by remember { mutableStateOf(initial?.exact ?: false) }
-    var queries by remember { mutableStateOf(initial?.queries?.joinToString(" | ").orEmpty()) }
-    var exclude by remember { mutableStateOf(initial?.exclude?.joinToString(", ").orEmpty()) }
-    var maxPrice by remember { mutableStateOf(initial?.maxPrice?.let { "%.2f".format(Locale.GERMANY, it) }.orEmpty()) }
-    var stores by remember { mutableStateOf(initial?.stores?.joinToString(", ").orEmpty()) }
-    val valid = names.isNotBlank() || brand.isNotBlank()
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "Neues Produkt" else "Produkt bearbeiten") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Field("Name", names, { names = it },
-                    "Mehrere Schreibweisen mit | trennen. Leer lassen = alle Artikel der Marke.")
-                Field("Marke", brand, { brand = it }, "Optional, muss dann vorkommen.")
-                Field("Größe", size, { size = it }, "z. B. 500 g, 1 l, 6 x 0,5 l – optional.")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = exact, onCheckedChange = { exact = it })
-                    Spacer(Modifier.size(8.dp))
-                    Text("Nur exakt diese Größe")
-                }
-                Field("Max. Preis (€)", maxPrice, { maxPrice = it }, "Optional.", KeyboardType.Decimal)
-                Field("Ohne diese Wörter", exclude, { exclude = it }, "Mit Komma trennen, z. B. Joghurt, Eis.")
-                Field("Eigene Suchbegriffe", queries, { queries = it }, "Optional, mit | trennen.")
-                Field("Nur diese Märkte", stores, { stores = it }, "Optional, mit Komma trennen. Leer = alle.")
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = valid, onClick = {
-                onSave(
-                    Product(
-                        id = initial?.id ?: UUID.randomUUID().toString(),
-                        names = Store.splitList(names, "|"),
-                        brand = brand.trim(),
-                        size = size.trim(),
-                        exact = exact,
-                        queries = Store.splitList(queries, "|"),
-                        exclude = Store.splitList(exclude, ","),
-                        maxPrice = maxPrice.replace(",", ".").trim().toDoubleOrNull(),
-                        stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) },
-                    )
-                )
-            }) { Text("Speichern") }
-        },
-        dismissButton = {
-            Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text("Abbrechen") }
-            }
-        },
-    )
-}
-
-@Composable
-private fun Field(
-    label: String, value: String, onChange: (String) -> Unit, hint: String,
-    keyboard: KeyboardType = KeyboardType.Text,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        supportingText = { Text(hint) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboard),
-        modifier = Modifier.fillMaxWidth(),
-    )
 }
 
 // ------------------------------------------------------------------ Einstellungen

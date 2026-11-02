@@ -16,6 +16,7 @@ data class Product(
     val exclude: List<String> = emptyList(), // Wörter, die ein Angebot aussortieren
     val maxPrice: Double? = null,
     val stores: List<String> = emptyList(),  // leer = Märkte aus den Einstellungen
+    val image: String = "",                  // lokaler Dateipfad oder URL, optional
 ) {
     val label: String
         get() = listOf(brand, names.joinToString(" | ")).filter { it.isNotBlank() }.joinToString(" ")
@@ -43,7 +44,11 @@ data class Offer(
     val validFrom: String,
     val validTo: String,
     val url: String,
+    val imageUrl: String = "",
 ) {
+    val displayName: String
+        get() = listOf(brand, productName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { description.take(50) }
+
     val rawText: String
         get() = listOf(brand, productName, description).filter { it.isNotBlank() }.joinToString(" ")
 }
