@@ -87,6 +87,7 @@ fun ProductsScreen(store: Store) {
     var editing by remember { mutableStateOf<Product?>(null) }
     var isNew by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
+    var tip by remember { mutableStateOf<String?>(null) }
 
     fun persist() = store.saveProducts(products.toList())
 
@@ -113,11 +114,19 @@ fun ProductsScreen(store: Store) {
         SearchScreen(
             store = store,
             onClose = { searching = false },
-            onManual = { searching = false; isNew = true; editing = Product(id = UUID.randomUUID().toString()) },
+            onManual = { searching = false; isNew = true; tip = null; editing = Product(id = UUID.randomUUID().toString()) },
             onPick = { offer ->
                 searching = false
                 isNew = true
+                tip = null
                 editing = productFromOffer(offer)
+            },
+            onPickCatalog = { item ->
+                searching = false
+                isNew = true
+                tip = "Prospekte nennen oft keine Sorte (z. B. „versch. Sorten“). Kürze den Namen ggf. – " +
+                    "je kürzer, desto mehr Angebote werden erkannt."
+                editing = productFromCatalog(item)
             },
         )
     } else {
@@ -128,7 +137,7 @@ fun ProductsScreen(store: Store) {
             ) {
                 if (products.isEmpty()) item { Text("Noch keine Produkte. Tippe auf +, um eins zu suchen.") }
                 items(products, key = { it.id }) { p ->
-                    Card(Modifier.fillMaxWidth().clickable { isNew = false; editing = p }) {
+                    Card(Modifier.fillMaxWidth().clickable { isNew = false; tip = null; editing = p }) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             ProductImage(p.image, 56.dp)
                             Spacer(Modifier.size(12.dp))
@@ -161,6 +170,7 @@ fun ProductsScreen(store: Store) {
         ProductDialog(
             initial = current,
             isNew = isNew,
+            tip = tip,
             onDismiss = { editing = null },
             onSave = { save(it); editing = null },
             onDelete = if (isNew) null else {
@@ -175,66 +185,103 @@ fun ProductsScreen(store: Store) {
     }
 }
 
+/** Größe aus einem Text als lesbare Angabe, z. B. "450 g", "1,5 l", "6 x 0,33 l". */
+internal fun sizeText(text: String): String = Matcher.parseSizes(text).firstOrNull()?.let { s ->
+    val big = s.amount >= 1000 && s.unit != "stk"
+    val amount = if (big) s.amount / 1000 else s.amount
+    val unit = when {
+        big && s.unit == "g" -> "kg"
+        big && s.unit == "ml" -> "l"
+        else -> s.unit
+    }
+    val a = if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString().replace(".", ",")
+    (if (s.count > 1) "${s.count} x " else "") + "$a $unit"
+}.orEmpty()
+
+/** Marke nicht doppelt im Namen ("Ferrero Nutella" → Name "Nutella"). */
+internal fun nameWithoutBrand(name: String, brand: String): String =
+    if (brand.isNotBlank() && name.startsWith(brand, ignoreCase = true)) name.substring(brand.length).trim(' ', '-', ',')
+    else name
+
 /** Vorschlag aus einem Angebot: Name, Marke, Größe und Bild übernehmen. */
-private fun productFromOffer(o: Offer): Product {
-    val size = Matcher.parseSizes(o.rawText).firstOrNull()?.let { s ->
-        val amount = if (s.amount >= 1000 && s.unit != "stk") s.amount / 1000 else s.amount
-        val unit = when {
-            s.amount >= 1000 && s.unit == "g" -> "kg"
-            s.amount >= 1000 && s.unit == "ml" -> "l"
-            else -> s.unit
-        }
-        val a = if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString().replace(".", ",")
-        (if (s.count > 1) "${s.count} x " else "") + "$a $unit"
-    }.orEmpty()
-    // Marke nicht doppelt im Namen ("Ferrero Nutella" → Name "Nutella")
-    val name = o.productName.let { n ->
-        if (o.brand.isNotBlank() && n.startsWith(o.brand, ignoreCase = true)) n.substring(o.brand.length).trim() else n
-    }.ifBlank { o.description.take(40) }
-    return Product(
-        id = UUID.randomUUID().toString(),
-        names = listOf(name).filter { it.isNotBlank() },
-        brand = o.brand,
-        size = size,
-        image = o.imageUrl,
-    )
-}
+private fun productFromOffer(o: Offer): Product = Product(
+    id = UUID.randomUUID().toString(),
+    names = listOf(nameWithoutBrand(o.productName, o.brand).ifBlank { o.description.take(40) }).filter { it.isNotBlank() },
+    brand = o.brand,
+    size = sizeText(o.rawText),
+    image = o.imageUrl,
+)
+
+/** Vorschlag aus dem Katalog (Open Food Facts). */
+private fun productFromCatalog(c: CatalogItem): Product = Product(
+    id = UUID.randomUUID().toString(),
+    names = listOf(nameWithoutBrand(c.name, c.brand)).filter { it.isNotBlank() },
+    brand = c.brand,
+    size = sizeText(c.quantity),
+    image = c.image,
+)
 
 // ------------------------------------------------------------------ Suche
 @Composable
-fun SearchScreen(store: Store, onClose: () -> Unit, onManual: () -> Unit, onPick: (Offer) -> Unit) {
+fun SearchScreen(
+    store: Store,
+    onClose: () -> Unit,
+    onManual: () -> Unit,
+    onPick: (Offer) -> Unit,
+    onPickCatalog: (CatalogItem) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    var results by remember { mutableStateOf<List<Offer>?>(null) }
+    var loadingOffers by remember { mutableStateOf(false) }
+    var loadingCatalog by remember { mutableStateOf(false) }
+    var offerError by remember { mutableStateOf<String?>(null) }
+    var catalogError by remember { mutableStateOf<String?>(null) }
+    var offers by remember { mutableStateOf<List<Offer>?>(null) }
+    var catalog by remember { mutableStateOf<List<CatalogItem>?>(null) }
     var onlyMine by remember { mutableStateOf(true) }
     val plz = store.plz
     val myStores = store.stores
+    val loading = loadingOffers || loadingCatalog
 
     BackHandler(onBack = onClose)
 
     fun search() {
-        if (query.isBlank()) return
-        if (!Regex("\\d{5}").matches(plz)) {
-            error = "Bitte zuerst in den Einstellungen deine PLZ eintragen."
-            return
+        val q = query.trim()
+        if (q.isBlank() || loading) return
+        offerError = null
+        catalogError = null
+        // Angebote (Marktguru) – braucht die PLZ
+        if (Regex("\\d{5}").matches(plz)) {
+            loadingOffers = true
+            scope.launch {
+                try {
+                    offers = withContext(Dispatchers.IO) { Marktguru.search(q, plz) }.distinctBy { it.id to it.storeSlug }
+                } catch (e: Exception) {
+                    offers = emptyList()
+                    offerError = "Angebote nicht abrufbar: ${e.message ?: e.javaClass.simpleName}"
+                } finally {
+                    loadingOffers = false
+                }
+            }
+        } else {
+            offers = emptyList()
+            offerError = "Für Angebote bitte in den Einstellungen die PLZ eintragen."
         }
-        loading = true
-        error = null
+        // Katalog (Open Food Facts) – unabhängig von Angeboten
+        loadingCatalog = true
         scope.launch {
             try {
-                val found = withContext(Dispatchers.IO) { Marktguru.search(query.trim(), plz) }
-                results = found.distinctBy { it.id to it.storeSlug }
+                catalog = withContext(Dispatchers.IO) { Catalog.search(q) }
             } catch (e: Exception) {
-                error = "Suche fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
+                catalog = emptyList()
+                catalogError = "Produktkatalog nicht erreichbar – später noch einmal versuchen."
             } finally {
-                loading = false
+                loadingCatalog = false
             }
         }
     }
 
-    val shown = results?.let { list -> if (onlyMine) list.filter { Matcher.storeAllowed(it, myStores) } else list }
+    val shownOffers = offers?.let { list -> if (onlyMine) list.filter { Matcher.storeAllowed(it, myStores) } else list }
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
@@ -256,43 +303,86 @@ fun SearchScreen(store: Store, onClose: () -> Unit, onManual: () -> Unit, onPick
                 keyboardActions = KeyboardActions(onSearch = { search() }),
                 modifier = Modifier.fillMaxWidth(),
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
-                Text("Nur meine Märkte", style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.size(6.dp))
-                Switch(checked = onlyMine, onCheckedChange = { onlyMine = it })
-            }
         }
-        error?.let { msg -> item { Text(msg, color = MaterialTheme.colorScheme.error) } }
-        if (shown != null && shown.isEmpty() && !loading) {
+
+        // ---------------- Aktuell im Angebot
+        if (offers != null) {
             item {
-                Text(
-                    if (onlyMine && results.orEmpty().isNotEmpty())
-                        "Nur Angebote bei anderen Märkten – Schalter „Nur meine Märkte“ ausschalten, um sie zu sehen."
-                    else "Gerade nichts im Prospekt. Gesucht wird nur in aktuellen Angeboten – " +
-                        "über „Ohne Suche anlegen“ kannst du den Artikel trotzdem beobachten.",
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionTitle("Aktuell im Angebot" + (shownOffers?.let { " (${it.size})" } ?: ""))
+                    Spacer(Modifier.weight(1f))
+                    Text("nur meine Märkte", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.size(6.dp))
+                    Switch(checked = onlyMine, onCheckedChange = { onlyMine = it })
+                }
+            }
+            offerError?.let { msg -> item { Hint(msg) } }
+            if (!loadingOffers && offerError == null && shownOffers.isNullOrEmpty()) {
+                item {
+                    Hint(
+                        if (onlyMine && offers.orEmpty().isNotEmpty()) "Nur bei anderen Märkten im Angebot."
+                        else "Gerade in keinem Prospekt – unten im Katalog findest du es trotzdem."
+                    )
+                }
+            }
+            items(shownOffers.orEmpty(), key = { "o|" + it.id + "|" + it.storeSlug }) { o ->
+                ResultCard(
+                    image = o.imageUrl,
+                    title = o.displayName,
+                    subtitle = o.description,
+                    footer = "${o.store}  ${o.price?.let { Matcher.euro(it) }.orEmpty()}  " +
+                        "${Matcher.shortDate(o.validFrom)}–${Matcher.shortDate(o.validTo)}",
+                    onClick = { onPick(o) },
                 )
             }
         }
-        items(shown.orEmpty(), key = { it.id + "|" + it.storeSlug }) { o ->
-            Card(Modifier.fillMaxWidth().clickable { onPick(o) }) {
-                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ProductImage(o.imageUrl, 64.dp)
-                    Spacer(Modifier.size(12.dp))
-                    Column {
-                        Text(o.displayName, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        if (o.description.isNotBlank()) {
-                            Text(o.description, style = MaterialTheme.typography.bodySmall,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        val price = o.price?.let { Matcher.euro(it) } ?: ""
-                        Text(
-                            "${o.store}  $price  ${Matcher.shortDate(o.validFrom)}–${Matcher.shortDate(o.validTo)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
+
+        // ---------------- Katalog
+        if (catalog != null || loadingCatalog) {
+            item { SectionTitle("Alle Produkte" + (catalog?.let { " (${it.size})" } ?: "")) }
+            catalogError?.let { msg -> item { Hint(msg) } }
+            if (!loadingCatalog && catalogError == null && catalog.isNullOrEmpty()) {
+                item { Hint("Nichts gefunden – anders schreiben oder „Ohne Suche anlegen“.") }
+            }
+            items(catalog.orEmpty(), key = { "c|" + it.code + "|" + it.displayName }) { c ->
+                ResultCard(
+                    image = c.image,
+                    title = c.displayName,
+                    subtitle = c.quantity,
+                    footer = "Beobachten",
+                    onClick = { onPickCatalog(c) },
+                )
+            }
+            item {
+                Text("Produktdaten: Open Food Facts", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+}
+
+@Composable
+private fun Hint(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
+private fun ResultCard(image: String, title: String, subtitle: String, footer: String, onClick: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            ProductImage(image, 64.dp)
+            Spacer(Modifier.size(12.dp))
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
+                Text(footer, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -303,6 +393,7 @@ fun SearchScreen(store: Store, onClose: () -> Unit, onManual: () -> Unit, onPick
 fun ProductDialog(
     initial: Product,
     isNew: Boolean,
+    tip: String? = null,
     onDismiss: () -> Unit,
     onSave: (Product) -> Unit,
     onDelete: (() -> Unit)?,
@@ -336,6 +427,9 @@ fun ProductDialog(
                     }
                 }
                 Field("Name", names, { names = it }, "z. B. Nutella")
+                tip?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
                 Field("Marke", brand, { brand = it }, "optional, z. B. Ferrero")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { Field("Größe", size, { size = it }, "optional, z. B. 450 g") }

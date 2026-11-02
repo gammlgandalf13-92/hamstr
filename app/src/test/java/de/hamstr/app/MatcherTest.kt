@@ -105,6 +105,19 @@ class MatcherTest {
             Offer("1", "ALDI SÜD", "aldi-sued", "", "", "", 1.0, null, "", "", ""), listOf(Geo.chainKey("ALDI SÜD"))))
     }
 
+    @Test fun catalogHelpers() {
+        assertEquals("301/762/042/2003", Catalog.folder("3017620422003"))
+        assertEquals("12345678", Catalog.folder("12345678"))
+        assertEquals("500 ml", sizeText("500 ml"))
+        assertEquals("1,5 l", sizeText("1500 ml"))
+        assertEquals("6 x 330 ml", sizeText("6 x 0,33 l"))
+        assertEquals("450 g", sizeText("450g"))
+        assertEquals("", sizeText("eine Packung"))
+        assertEquals("Energy Ultra", nameWithoutBrand("Monster Energy Ultra", "Monster"))
+        assertEquals("Nutella", nameWithoutBrand("Ferrero Nutella", "Ferrero"))
+        assertEquals("Nutella", nameWithoutBrand("Nutella", "Ferrero"))
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!
