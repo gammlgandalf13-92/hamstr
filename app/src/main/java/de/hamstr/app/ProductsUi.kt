@@ -241,34 +241,27 @@ fun SearchScreen(store: Store, onClose: () -> Unit, onManual: () -> Unit, onPick
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onClose) { Text("← Zurück") }
                 Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = onManual) { Text("Manuell anlegen") }
+                TextButton(onClick = onManual) { Text("Ohne Suche anlegen") }
             }
-        }
-        item {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                label = { Text("Artikel suchen, z. B. Nutella") },
+                placeholder = { Text("Artikel suchen, z. B. Nutella") },
                 singleLine = true,
+                trailingIcon = {
+                    if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                    else TextButton(onClick = { search() }, enabled = query.isNotBlank()) { Text("🔍", fontSize = 18.sp) }
+                },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { search() }),
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-        item {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = { search() }, enabled = !loading && query.isNotBlank()) { Text("Suchen") }
-                Spacer(Modifier.size(12.dp))
-                if (loading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
                 Spacer(Modifier.weight(1f))
                 Text("Nur meine Märkte", style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.size(6.dp))
                 Switch(checked = onlyMine, onCheckedChange = { onlyMine = it })
             }
-            Text(
-                "Gefunden werden Artikel, die gerade in einem Prospekt sind. Alles andere über „Manuell anlegen“.",
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
         error?.let { msg -> item { Text(msg, color = MaterialTheme.colorScheme.error) } }
         if (shown != null && shown.isEmpty() && !loading) {
@@ -276,7 +269,8 @@ fun SearchScreen(store: Store, onClose: () -> Unit, onManual: () -> Unit, onPick
                 Text(
                     if (onlyMine && results.orEmpty().isNotEmpty())
                         "Nur Angebote bei anderen Märkten – Schalter „Nur meine Märkte“ ausschalten, um sie zu sehen."
-                    else "Gerade nichts im Prospekt. Du kannst den Artikel trotzdem manuell anlegen.",
+                    else "Gerade nichts im Prospekt. Gesucht wird nur in aktuellen Angeboten – " +
+                        "über „Ohne Suche anlegen“ kannst du den Artikel trotzdem beobachten.",
                 )
             }
         }
@@ -322,33 +316,53 @@ fun ProductDialog(
     var maxPrice by remember { mutableStateOf(initial.maxPrice?.let { "%.2f".format(Locale.GERMANY, it) }.orEmpty()) }
     var stores by remember { mutableStateOf(initial.stores.joinToString(", ")) }
     var image by remember { mutableStateOf(initial.image) }
+    // Weitere Optionen nur aufklappen, wenn dort schon etwas eingetragen ist
+    var advanced by remember {
+        mutableStateOf(initial.maxPrice != null || initial.exclude.isNotEmpty() ||
+            initial.queries.isNotEmpty() || initial.stores.isNotEmpty())
+    }
     val valid = names.isNotBlank() || brand.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isNew) "Neues Produkt" else "Produkt bearbeiten") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (image.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        ProductImage(image, 72.dp)
+                        ProductImage(image, 64.dp)
                         Spacer(Modifier.size(8.dp))
                         TextButton(onClick = { image = "" }) { Text("Bild entfernen") }
                     }
                 }
-                Field("Name", names, { names = it },
-                    "Mehrere Schreibweisen mit | trennen. Leer lassen = alle Artikel der Marke.")
-                Field("Marke", brand, { brand = it }, "Optional, muss dann vorkommen.")
-                Field("Größe", size, { size = it }, "z. B. 500 g, 1 l, 6 x 0,5 l – optional.")
+                Field("Name", names, { names = it }, "z. B. Nutella")
+                Field("Marke", brand, { brand = it }, "optional, z. B. Ferrero")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(checked = exact, onCheckedChange = { exact = it })
+                    Box(Modifier.weight(1f)) { Field("Größe", size, { size = it }, "optional, z. B. 450 g") }
                     Spacer(Modifier.size(8.dp))
-                    Text("Nur exakt diese Größe")
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Switch(checked = exact, onCheckedChange = { exact = it }, enabled = size.isNotBlank())
+                        Text("exakt", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
-                Field("Max. Preis (€)", maxPrice, { maxPrice = it }, "Optional.", KeyboardType.Decimal)
-                Field("Ohne diese Wörter", exclude, { exclude = it }, "Mit Komma trennen, z. B. Joghurt, Eis.")
-                Field("Eigene Suchbegriffe", queries, { queries = it }, "Optional, mit | trennen.")
-                Field("Nur diese Märkte", stores, { stores = it }, "Optional, mit Komma trennen. Leer = alle.")
+                if (names.isBlank() && brand.isNotBlank()) {
+                    Text("Ohne Name: alle Artikel dieser Marke werden gemeldet.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
+
+                TextButton(onClick = { advanced = !advanced }) {
+                    Text(if (advanced) "▲ Weniger Optionen" else "▼ Weitere Optionen")
+                }
+                if (advanced) {
+                    Field("Max. Preis (€)", maxPrice, { maxPrice = it }, "z. B. 2,49", KeyboardType.Decimal)
+                    Field("Ohne diese Wörter", exclude, { exclude = it }, "z. B. Joghurt, Eis")
+                    Field("Nur diese Märkte", stores, { stores = it }, "leer = alle, z. B. rewe, lidl")
+                    Field("Eigene Suchbegriffe", queries, { queries = it }, "z. B. Beerenmix | Waldbeeren")
+                    Text(
+                        "Tipp: Im Namen mehrere Schreibweisen mit | trennen – eine davon muss passen.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
@@ -379,14 +393,14 @@ fun ProductDialog(
 
 @Composable
 private fun Field(
-    label: String, value: String, onChange: (String) -> Unit, hint: String,
+    label: String, value: String, onChange: (String) -> Unit, placeholder: String,
     keyboard: KeyboardType = KeyboardType.Text,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(label) },
-        supportingText = { Text(hint) },
+        placeholder = { Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard),
         modifier = Modifier.fillMaxWidth(),
