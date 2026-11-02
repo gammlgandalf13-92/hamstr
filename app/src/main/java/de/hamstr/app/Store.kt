@@ -31,11 +31,6 @@ class Store(context: Context) {
         get() = prefs.getInt("hour", 7)
         set(v) = prefs.edit().putInt("hour", v.coerceIn(0, 23)).apply()
 
-    /** Nur nötig, wenn das Update-Repo privat ist (fein-granularer Token mit Lesezugriff). */
-    var githubToken: String
-        get() = prefs.getString("githubToken", "").orEmpty()
-        set(v) = prefs.edit().putString("githubToken", v.trim()).apply()
-
     /** Version, für die schon eine Update-Benachrichtigung kam. */
     var updateNotified: Int
         get() = prefs.getInt("updateNotified", 0)

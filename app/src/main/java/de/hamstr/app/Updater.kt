@@ -13,13 +13,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class UpdateInfo(
-    val version: Int,          // Build-Nummer aus dem Release-Tag (v1.0.N → N)
+    val version: Int,        // Build-Nummer aus dem Release-Tag (v1.0.N → N)
     val name: String,
-    val apiAssetUrl: String,   // für private Repos (mit Token)
-    val downloadUrl: String,   // für öffentliche Repos
+    val downloadUrl: String,
 )
 
-/** Prüft GitHub-Releases auf eine neuere APK, lädt sie herunter und startet die Installation. */
+/** Prüft die (öffentlichen) GitHub-Releases auf eine neuere APK, lädt sie herunter und startet die Installation. */
 object Updater {
     private const val USER_AGENT = "Hamstr-Updater"
     private val repo get() = BuildConfig.UPDATE_REPO
@@ -31,18 +30,14 @@ object Updater {
     }
 
     /** Neuestes Release – null, wenn es keins mit APK gibt. Blockierend. */
-    fun latest(token: String): UpdateInfo? {
-        val c = open("https://api.github.com/repos/$repo/releases/latest", token)
+    fun latest(): UpdateInfo? {
+        val c = open("https://api.github.com/repos/$repo/releases/latest")
         c.setRequestProperty("Accept", "application/vnd.github+json")
         try {
             when (c.responseCode) {
                 200 -> Unit
-                401 -> throw IOException("GitHub-Token ungültig oder abgelaufen.")
-                403 -> throw IOException("GitHub lehnt die Anfrage ab (zu viele Anfragen?). Später erneut versuchen.")
-                404 -> throw IOException(
-                    if (token.isBlank()) "Kein Release gefunden – ist das Repo privat? Dann Token eintragen oder Repo öffentlich machen."
-                    else "Kein Release gefunden – hat der Token Lesezugriff auf $repo?"
-                )
+                403, 429 -> throw IOException("GitHub hat gerade zu viele Anfragen – später erneut versuchen.")
+                404 -> throw IOException("Kein Release gefunden. Ist das Repo $repo öffentlich?")
                 else -> throw IOException("GitHub HTTP ${c.responseCode}")
             }
             val o = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
@@ -52,7 +47,7 @@ object Updater {
             for (i in 0 until assets.length()) {
                 val a = assets.optJSONObject(i) ?: continue
                 if (a.optString("name").endsWith(".apk")) {
-                    return UpdateInfo(version, o.optString("name").ifBlank { tag }, a.optString("url"), a.optString("browser_download_url"))
+                    return UpdateInfo(version, o.optString("name").ifBlank { tag }, a.optString("browser_download_url"))
                 }
             }
             return null
@@ -61,20 +56,17 @@ object Updater {
         }
     }
 
-    /** Lädt die APK in den Cache. Weiterleitungen werden selbst verfolgt, damit der Token nicht an fremde Server geht. */
-    fun download(context: Context, info: UpdateInfo, token: String, onProgress: (Float) -> Unit): File {
+    /** Lädt die APK in den Cache (GitHub leitet auf seinen Download-Server weiter, das folgt HttpURLConnection selbst). */
+    fun download(context: Context, info: UpdateInfo, onProgress: (Float) -> Unit): File {
         val target = File(context.cacheDir, "updates/hamstr.apk").apply { parentFile?.mkdirs(); delete() }
-        var url = if (token.isNotBlank()) info.apiAssetUrl else info.downloadUrl
-        var sendToken = token.isNotBlank()
+        var url = info.downloadUrl
         repeat(6) {
-            val c = open(url, if (sendToken) token else "")
+            val c = open(url)
             c.instanceFollowRedirects = false
-            c.setRequestProperty("Accept", "application/octet-stream")
             try {
                 val code = c.responseCode
                 if (code in 300..399) {
                     url = c.getHeaderField("Location") ?: throw IOException("Weiterleitung ohne Ziel")
-                    sendToken = sendToken && URL(url).host == "api.github.com"
                     return@repeat
                 }
                 if (code != 200) throw IOException("Download fehlgeschlagen (HTTP $code)")
@@ -119,12 +111,11 @@ object Updater {
         )
     }
 
-    private fun open(url: String, token: String): HttpURLConnection {
+    private fun open(url: String): HttpURLConnection {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 20_000
         c.readTimeout = 60_000
         c.setRequestProperty("User-Agent", USER_AGENT)
-        if (token.isNotBlank()) c.setRequestProperty("Authorization", "Bearer ${token.trim()}")
         return c
     }
 }

@@ -13,8 +13,7 @@ im Prospekt sind. Läuft komplett auf dem Handy – kein Server, kein Konto.
 
 Updates: in der App unter **Einstellungen → Updates → Nach Updates suchen**. Hamstr meldet neue Versionen
 außerdem beim täglichen Check. Einstellungen und Produkte bleiben bei Updates erhalten.
-Ist dieses Repo privat, braucht die Update-Funktion einen GitHub-Token mit Lesezugriff (in der App unter
-„Zugang zu privatem Repo“); bei einem öffentlichen Repo geht es ohne.
+Die Update-Funktion setzt voraus, dass dieses Repo **öffentlich** ist.
 
 ## Produkte eintragen
 

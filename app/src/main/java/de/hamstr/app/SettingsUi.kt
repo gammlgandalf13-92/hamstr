@@ -253,15 +253,13 @@ private fun UpdateSection(store: Store) {
     var status by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
-    var showToken by remember { mutableStateOf(store.githubToken.isNotBlank()) }
-    var token by remember { mutableStateOf(store.githubToken) }
 
     fun check() {
         busy = true
         status = null
         scope.launch {
             try {
-                latest = withContext(Dispatchers.IO) { Updater.latest(store.githubToken) }
+                latest = withContext(Dispatchers.IO) { Updater.latest() }
                 checked = true
                 if (latest == null) status = "Noch keine Version mit APK veröffentlicht."
             } catch (e: Exception) {
@@ -283,7 +281,7 @@ private fun UpdateSection(store: Store) {
         scope.launch {
             try {
                 val apk = withContext(Dispatchers.IO) {
-                    Updater.download(ctx, info, store.githubToken) { p -> progress = p }
+                    Updater.download(ctx, info) { p -> progress = p }
                 }
                 status = "Installation wird gestartet…"
                 Updater.install(ctx, apk)
@@ -312,28 +310,6 @@ private fun UpdateSection(store: Store) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
     }
     status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-
-    TextButton(onClick = { showToken = !showToken }) {
-        Text(if (showToken) "▲ Zugang zu privatem Repo" else "▼ Zugang zu privatem Repo")
-    }
-    if (showToken) {
-        Text(
-            "Nur nötig, wenn das Repo ${BuildConfig.UPDATE_REPO} privat ist: GitHub-Token mit Lesezugriff " +
-                "(„Contents: Read“) auf dieses Repo eintragen.",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        OutlinedTextField(
-            value = token,
-            onValueChange = { token = it.trim() },
-            label = { Text("GitHub-Token") },
-            singleLine = true,
-            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        TextButton(onClick = { store.githubToken = token; status = "Token gespeichert."; check() }) {
-            Text("Token speichern und prüfen")
-        }
-    }
 }
 
 /** Ketten im Umkreis, gruppiert, mit Häkchen. */
