@@ -92,7 +92,7 @@ class MatcherTest {
 
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
-        val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79))!!
+        val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!
         assertNotEquals(a.dedupeKey, c.dedupeKey)
         assertEquals(2.79, Matcher.bestHits(listOf(a, c)).single().offer.price!!, 0.001)
         assertEquals("REWE: Ferrero Nutella", a.title())
