@@ -138,6 +138,7 @@ class Store(context: Context) {
         .put("exclude", JSONArray(p.exclude))
         .put("stores", JSONArray(p.stores))
         .put("image", p.image)
+        .put("imageSource", p.imageSource)
         .apply { p.maxPrice?.let { put("maxPrice", it) } }
 
     private fun productFrom(o: JSONObject): Product {
@@ -156,6 +157,7 @@ class Store(context: Context) {
             maxPrice = if (o.has("maxPrice")) o.optDouble("maxPrice") else null,
             stores = list("stores"),
             image = o.optString("image"),
+            imageSource = o.optString("imageSource"),
         )
     }
 

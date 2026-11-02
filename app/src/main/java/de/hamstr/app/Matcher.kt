@@ -17,6 +17,7 @@ data class Product(
     val maxPrice: Double? = null,
     val stores: List<String> = emptyList(),  // leer = Märkte aus den Einstellungen
     val image: String = "",                  // lokaler Dateipfad oder URL, optional
+    val imageSource: String = "",            // "offer" (Prospekt), "catalog" (Open Food Facts), "" = unbekannt
 ) {
     val label: String
         get() = listOf(brand, names.joinToString(" | ")).filter { it.isNotBlank() }.joinToString(" ")

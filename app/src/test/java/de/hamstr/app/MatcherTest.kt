@@ -118,6 +118,28 @@ class MatcherTest {
         assertEquals("Nutella", nameWithoutBrand("Nutella", "Ferrero"))
     }
 
+    @Test fun imageUpgrades() {
+        fun o(img: String) = Offer("1", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.99, null, "", "", "", img)
+        val catalog = nutella.copy(id = "c", image = "/x/c.img", imageSource = "catalog")
+        val offerImg = nutella.copy(id = "o", image = "/x/o.img", imageSource = "offer")
+        val noImg = nutella.copy(id = "n")
+        val legacy = nutella.copy(id = "l", image = "/x/l.img")
+        val brandWithImg = Product("b", brand = "Ferrero", image = "/x/b.img", imageSource = "catalog")
+        val brandNoImg = Product("bn", brand = "Ferrero")
+        val products = listOf(catalog, offerImg, noImg, legacy, brandWithImg, brandNoImg)
+        val hits = products.map { p -> Matcher.match(p, o("https://cdn/img.webp"), stores, today)!! }
+
+        val up = Checker.imageUpgrades(products, hits)
+        assertEquals(setOf("c", "n", "l", "bn"), up.keys)   // Prospektbild und Marke mit Bild bleiben
+        assertEquals("https://cdn/img.webp", up["c"])
+
+        // ohne Bild im Angebot oder bei unsicherem Treffer: nichts
+        val noImage = products.map { p -> Matcher.match(p, o(""), stores, today)!! }
+        assertTrue(Checker.imageUpgrades(products, noImage).isEmpty())
+        val unsure = hits.map { it.copy(confidence = 0.5) }
+        assertTrue(Checker.imageUpgrades(products, unsure).isEmpty())
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

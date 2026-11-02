@@ -210,6 +210,7 @@ private fun productFromOffer(o: Offer): Product = Product(
     brand = o.brand,
     size = sizeText(o.rawText),
     image = o.imageUrl,
+    imageSource = if (o.imageUrl.isNotBlank()) "offer" else "",
 )
 
 /** Vorschlag aus dem Katalog (Open Food Facts). */
@@ -219,6 +220,7 @@ private fun productFromCatalog(c: CatalogItem): Product = Product(
     brand = c.brand,
     size = sizeText(c.quantity),
     image = c.image,
+    imageSource = if (c.image.isNotBlank()) "catalog" else "",
 )
 
 // ------------------------------------------------------------------ Suche
@@ -472,6 +474,7 @@ fun ProductDialog(
                         maxPrice = maxPrice.replace(",", ".").trim().toDoubleOrNull(),
                         stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) },
                         image = image,
+                        imageSource = if (image.isBlank()) "" else initial.imageSource,
                     )
                 )
             }) { Text("Speichern") }

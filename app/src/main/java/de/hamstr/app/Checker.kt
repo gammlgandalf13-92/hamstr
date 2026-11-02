@@ -72,6 +72,7 @@ object Checker {
 
         val best = Matcher.bestHits(all).sortedWith(compareBy<Hit>({ -it.confidence }, { it.offer.store }))
         st.saveHits(best)
+        upgradeImages(context, st, products, best, log)
 
         val seen = st.seen()
         val history = st.history()
@@ -107,6 +108,45 @@ object Checker {
         st.lastRun = System.currentTimeMillis()
         checkForUpdate(context, st)
         return Summary(products.size, best.size, fresh.size, errors)
+    }
+
+    /**
+     * Welche Produkte bekommen ein Prospektbild? Ersetzt werden fehlende Bilder und Katalogfotos
+     * (und einmalig Bilder unbekannter Herkunft) – nie Prospektbilder. Nur bei sicheren Treffern.
+     * Marken-Einträge (ohne Namen) bekommen nur ein Bild, wenn sie noch keins haben.
+     */
+    internal fun imageUpgrades(products: List<Product>, hits: List<Hit>): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        for (p in products) {
+            val upgradable = when {
+                p.image.isBlank() -> true
+                p.names.isEmpty() -> false
+                else -> p.imageSource != "offer"
+            }
+            if (!upgradable) continue
+            val hit = hits.filter { it.product.id == p.id && it.offer.imageUrl.isNotBlank() && it.confidence >= 0.7 }
+                .maxByOrNull { it.confidence } ?: continue
+            result[p.id] = hit.offer.imageUrl
+        }
+        return result
+    }
+
+    private fun upgradeImages(context: Context, st: Store, products: List<Product>, hits: List<Hit>, log: StringBuilder) {
+        val upgrades = imageUpgrades(products, hits)
+        if (upgrades.isEmpty()) return
+        val updated = products.map { p ->
+            val url = upgrades[p.id] ?: return@map p
+            val local = Images.download(context, url, p.id) ?: return@map p
+            log.append("\nBild aus dem Prospekt übernommen: ${p.label}")
+            p.copy(image = local, imageSource = "offer")
+        }
+        // Frisch laden, damit gleichzeitige Änderungen in der App nicht verloren gehen
+        val current = st.products().associateBy { it.id }
+        val byId = updated.associateBy { it.id }
+        st.saveProducts(current.values.map { c ->
+            val u = byId[c.id]
+            if (u != null && u.imageSource == "offer" && c.imageSource != "offer") c.copy(image = u.image, imageSource = "offer") else c
+        })
     }
 
     /** Neue App-Version? Einmal pro Version melden. Fehler hier stören den Angebots-Check nicht. */
