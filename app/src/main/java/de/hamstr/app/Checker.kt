@@ -161,14 +161,6 @@ object Checker {
     }
 
     /** Neue App-Version? Einmal pro Version melden. Fehler hier stören den Angebots-Check nicht. */
-    private fun checkForUpdate(context: Context, st: Store) {
-        runCatching {
-            val latest = Updater.latest() ?: return
-            if (latest.version > Updater.currentVersion(context) && latest.version > st.updateNotified) {
-                Notifier.info(context, "Hamstr-Update verfügbar",
-                    "${latest.name} – in den Einstellungen unter „Updates“ installieren.")
-                st.updateNotified = latest.version
-            }
-        }
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun checkForUpdate(context: Context, st: Store) = UpdateNotifications.check(context)
 }

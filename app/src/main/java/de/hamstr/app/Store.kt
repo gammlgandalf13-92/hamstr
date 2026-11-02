@@ -36,6 +36,15 @@ class Store(context: Context) {
         get() = prefs.getInt("updateNotified", 0)
         set(v) = prefs.edit().putInt("updateNotified", v).apply()
 
+    var updateNotifiedAt: Long
+        get() = prefs.getLong("updateNotifiedAt", 0L)
+        set(v) = prefs.edit().putLong("updateNotifiedAt", v).apply()
+
+    /** Version, für die schon die Erinnerung kam. */
+    var updateReminded: Int
+        get() = prefs.getInt("updateReminded", 0)
+        set(v) = prefs.edit().putInt("updateReminded", v).apply()
+
     /** Ketten der Märkteliste (eigene + aus der Umkreissuche) mit Entfernung. */
     fun chains(): Map<String, ChainInfo> {
         val raw = prefs.getString("chains", null) ?: return emptyMap()

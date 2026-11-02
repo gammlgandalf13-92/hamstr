@@ -28,12 +28,20 @@ class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 object Scheduler {
     const val DAILY = "hamstr-daily"
     const val NOW = "hamstr-now"
+    const val UPDATES = "hamstr-updates"
 
     private val network = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
     /** Beim App-Start: täglichen Check sicherstellen, ohne einen bestehenden Plan zu verschieben. */
-    fun ensureScheduled(context: Context) =
+    fun ensureScheduled(context: Context) {
         schedule(context, Store(context).hour, ExistingPeriodicWorkPolicy.KEEP)
+        // Update-Prüfung alle 6 Stunden, unabhängig vom Angebots-Check
+        val updates = PeriodicWorkRequestBuilder<UpdateWorker>(6, TimeUnit.HOURS)
+            .setInitialDelay(30, TimeUnit.MINUTES)
+            .setConstraints(network)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(UPDATES, ExistingPeriodicWorkPolicy.KEEP, updates)
+    }
 
     fun schedule(
         context: Context,

@@ -185,6 +185,23 @@ class MatcherTest {
         assertEquals("Edeka", Markets.labelFor("Marktkauf", "edeka"))
     }
 
+    @Test fun updateNotifications() {
+        val day = 24L * 60 * 60 * 1000
+        val n = UpdateNotifications
+        // aktuell → nichts
+        assertEquals(n.Notice.NONE, n.decide(19, 19, 0, 0, 0, 10 * day))
+        // neue Version → erste Meldung
+        assertEquals(n.Notice.FIRST, n.decide(20, 19, 19, 0, 0, 10 * day))
+        // schon gemeldet, erst 1 Tag her → nichts
+        assertEquals(n.Notice.NONE, n.decide(20, 19, 20, 10 * day, 0, 11 * day))
+        // nach 3 Tagen → eine Erinnerung
+        assertEquals(n.Notice.REMINDER, n.decide(20, 19, 20, 10 * day, 0, 13 * day))
+        // Erinnerung schon verschickt → nichts mehr
+        assertEquals(n.Notice.NONE, n.decide(20, 19, 20, 10 * day, 20, 30 * day))
+        // noch neuere Version → wieder erste Meldung
+        assertEquals(n.Notice.FIRST, n.decide(21, 19, 20, 10 * day, 20, 30 * day))
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!
