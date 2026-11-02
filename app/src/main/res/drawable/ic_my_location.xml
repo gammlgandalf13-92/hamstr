@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Standort-Pin: blauer Punkt mit weißem Rand und leichtem Hof, wie bei Navi-Apps -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="28"
+    android:viewportHeight="28">
+    <path android:fillColor="#331A73E8" android:pathData="M0,14a14,14 0 1,0 28,0a14,14 0 1,0 -28,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M6,14a8,8 0 1,0 16,0a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#FF1A73E8" android:pathData="M8.5,14a5.5,5.5 0 1,0 11,0a5.5,5.5 0 1,0 -11,0" />
+</vector>

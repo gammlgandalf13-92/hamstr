@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -72,6 +73,7 @@ fun SettingsScreen(store: Store) {
     var hour by remember { mutableStateOf(store.hour.toString()) }
     var radius by remember { mutableFloatStateOf(store.radiusKm.toFloat()) }
     var center by remember { mutableStateOf(store.center?.let { it.first to it.second }) }
+    var centerIsLocation by remember { mutableStateOf(store.centerIsLocation) }
     var nearby by remember { mutableStateOf<List<NearbyStore>?>(null) }
     var chosen by remember { mutableStateOf(store.stores.toSet()) }
     var busy by remember { mutableStateOf<String?>(null) }
@@ -102,6 +104,8 @@ fun SettingsScreen(store: Store) {
                 message = "Kein Standort verfügbar. Ist der Standortdienst eingeschaltet?"
             } else {
                 center = loc.latitude to loc.longitude
+                centerIsLocation = true
+                store.centerIsLocation = true
                 val code = withContext(Dispatchers.IO) { Geo.postcodeFor(ctx, loc.latitude, loc.longitude) }
                 store.center = Triple(loc.latitude, loc.longitude, code.orEmpty())
                 if (code != null) {
@@ -123,8 +127,12 @@ fun SettingsScreen(store: Store) {
             try {
                 // Mittelpunkt: Standort, sonst über die PLZ bestimmen
                 val known = store.center
-                val c = known?.takeIf { it.third == plz.trim() }?.let { it.first to it.second }
-                    ?: withContext(Dispatchers.IO) { Geo.coordsFor(ctx, plz.trim()) }
+                val reuse = known?.takeIf { it.third == plz.trim() }?.let { it.first to it.second }
+                val c = reuse ?: withContext(Dispatchers.IO) { Geo.coordsFor(ctx, plz.trim()) }
+                if (reuse == null && c != null) {
+                    centerIsLocation = false
+                    store.centerIsLocation = false
+                }
                 if (c == null) {
                     message = "Zur PLZ $plz wurde kein Ort gefunden."
                 } else {
@@ -176,7 +184,8 @@ fun SettingsScreen(store: Store) {
         )
 
         center?.let { (lat, lon) ->
-            StoreMap(lat, lon, radius.roundToInt(), nearby.orEmpty())
+            val label = if (centerIsLocation) "Dein Standort" else "Mitte von PLZ ${plz.trim()}"
+            StoreMap(lat, lon, radius.roundToInt(), nearby.orEmpty(), label)
         }
 
         Button(onClick = { findStores() }, enabled = plzOk && busy == null) { Text("Supermärkte im Umkreis finden") }
@@ -342,7 +351,7 @@ private fun NearbyChains(list: List<NearbyStore>, chosen: Set<String>, onToggle:
 
 /** OpenStreetMap-Karte mit Umkreis und Märkten. */
 @Composable
-private fun StoreMap(lat: Double, lon: Double, radiusKm: Int, shops: List<NearbyStore>) {
+private fun StoreMap(lat: Double, lon: Double, radiusKm: Int, shops: List<NearbyStore>, centerLabel: String) {
     val ctx = LocalContext.current
     val map = remember {
         Configuration.getInstance().apply {
@@ -383,6 +392,13 @@ private fun StoreMap(lat: Double, lon: Double, radiusKm: Int, shops: List<Nearby
                     snippet = s.address
                 })
             }
+            // Mittelpunkt des Umkreises – zuletzt hinzugefügt, damit er über den Markt-Pins liegt
+            m.overlays.add(Marker(m).apply {
+                position = c
+                icon = ContextCompat.getDrawable(ctx, R.drawable.ic_my_location)
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                title = centerLabel
+            })
             // Zoom so, dass der Kreis gut hineinpasst
             m.controller.setZoom((14.5 - ln(radiusKm.toDouble()) / ln(2.0)).coerceIn(8.0, 16.0))
             m.controller.setCenter(c)

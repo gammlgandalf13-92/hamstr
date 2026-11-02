@@ -36,6 +36,11 @@ class Store(context: Context) {
         get() = prefs.getInt("updateNotified", 0)
         set(v) = prefs.edit().putInt("updateNotified", v).apply()
 
+    /** Stammt der Mittelpunkt vom Standort (true) oder von der PLZ (false)? */
+    var centerIsLocation: Boolean
+        get() = prefs.getBoolean("centerIsLocation", false)
+        set(v) = prefs.edit().putBoolean("centerIsLocation", v).apply()
+
     var radiusKm: Int
         get() = prefs.getInt("radiusKm", 5)
         set(v) = prefs.edit().putInt("radiusKm", v.coerceIn(1, 25)).apply()
