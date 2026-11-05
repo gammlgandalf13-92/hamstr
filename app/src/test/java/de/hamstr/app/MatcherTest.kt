@@ -203,6 +203,17 @@ class MatcherTest {
         assertEquals(Notice.FIRST, n.decide(21, 19, 20, 10 * day, 20, 30 * day))
     }
 
+    @Test fun barcodes() {
+        assertEquals("4008400401621", Catalog.normalizeBarcode("4 008400 401621"))
+        assertEquals("40084004", Catalog.normalizeBarcode("4008-4004"))
+        assertEquals("036000291452", Catalog.normalizeBarcode("036000291452"))
+        assertNull(Catalog.normalizeBarcode("Nutella"))
+        assertNull(Catalog.normalizeBarcode("97539"))          // PLZ ist kein Barcode
+        assertNull(Catalog.normalizeBarcode("400840040162a"))
+        val item = CatalogItem("4008400401621", "Nutella", "Ferrero", "450 g", "")
+        assertEquals("4008400401621", productFromCatalog(item).ean)
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

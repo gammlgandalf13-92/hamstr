@@ -40,6 +40,34 @@ object Catalog {
         return strict.ifEmpty { items }.distinctBy { Matcher.norm(it.displayName + it.quantity) }.take(25)
     }
 
+    /** "4 008400 401621" → "4008400401621"; null, wenn es kein EAN/UPC-Code ist. */
+    fun normalizeBarcode(text: String): String? {
+        val digits = text.filter { !it.isWhitespace() && it != '-' }
+        return digits.takeIf { it.all(Char::isDigit) && it.length in setOf(8, 12, 13, 14) }
+    }
+
+    /** Produkt per Barcode; null, wenn Open Food Facts es nicht kennt. Blockierend. */
+    fun byBarcode(code: String): CatalogItem? {
+        val c = URL("https://world.openfoodfacts.org/api/v2/product/${enc(code)}?fields=$FIELDS")
+            .openConnection() as HttpURLConnection
+        c.connectTimeout = 15_000
+        c.readTimeout = 25_000
+        c.setRequestProperty("User-Agent", USER_AGENT)
+        c.setRequestProperty("Accept", "application/json")
+        try {
+            val status = c.responseCode
+            if (status == 404) return null
+            if (status != 200) throw IOException("HTTP $status")
+            val o = JSONObject(c.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+            if (o.optInt("status", 0) != 1) return null
+            val product = o.optJSONObject("product") ?: return null
+            if (!product.has("code")) product.put("code", code)
+            return parse(JSONArray().put(product)).firstOrNull()
+        } finally {
+            c.disconnect()
+        }
+    }
+
     private fun searchNew(q: String): List<CatalogItem> {
         val url = "https://search.openfoodfacts.org/search?page_size=40&fields=$FIELDS&q=" + enc(q)
         val hits = JSONObject(get(url)).optJSONArray("hits") ?: return emptyList()

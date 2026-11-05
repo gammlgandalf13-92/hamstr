@@ -18,6 +18,7 @@ data class Product(
     val stores: List<String> = emptyList(),  // leer = Märkte aus den Einstellungen
     val image: String = "",                  // lokaler Dateipfad oder URL, optional
     val imageSource: String = "",            // "offer" (Prospekt), "catalog" (Open Food Facts), "" = unbekannt
+    val ean: String = "",                    // Barcode aus Katalog/Scan – zum Wiedererkennen beim Anlegen
 ) {
     val label: String
         get() = listOf(brand, names.joinToString(" | ")).filter { it.isNotBlank() }.joinToString(" ")

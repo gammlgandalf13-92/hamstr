@@ -184,6 +184,7 @@ class Store(context: Context) {
         .put("stores", JSONArray(p.stores))
         .put("image", p.image)
         .put("imageSource", p.imageSource)
+        .put("ean", p.ean)
         .apply { p.maxPrice?.let { put("maxPrice", it) } }
 
     private fun productFrom(o: JSONObject): Product {
@@ -203,6 +204,7 @@ class Store(context: Context) {
             stores = list("stores"),
             image = o.optString("image"),
             imageSource = o.optString("imageSource"),
+            ean = o.optString("ean"),
         )
     }
 

@@ -159,10 +159,17 @@ fun ProductsScreen(store: Store) {
             },
             onPickCatalog = { item ->
                 searching = false
-                isNew = true
-                tip = "Prospekte nennen oft keine Sorte (z. B. „versch. Sorten“). Kürze den Namen ggf. – " +
-                    "je kürzer, desto mehr Angebote werden erkannt."
-                editing = productFromCatalog(item)
+                val existing = products.firstOrNull { it.ean.isNotBlank() && it.ean == item.code }
+                if (existing != null) {
+                    isNew = false
+                    tip = "Dieses Produkt beobachtest du schon."
+                    editing = existing
+                } else {
+                    isNew = true
+                    tip = "Prospekte nennen oft keine Sorte (z. B. „versch. Sorten“). Kürze den Namen ggf. – " +
+                        "je kürzer, desto mehr Angebote werden erkannt."
+                    editing = productFromCatalog(item)
+                }
             },
         )
     } else {
@@ -283,6 +290,7 @@ internal fun productFromCatalog(c: CatalogItem): Product = Product(
     brand = c.brand,
     size = sizeText(c.quantity),
     image = c.image,
+    ean = c.code,
     imageSource = when {
         c.image.isBlank() -> ""
         c.imageFromOffer -> "offer"
@@ -299,6 +307,7 @@ fun SearchScreen(
     onPick: (Offer) -> Unit,
     onPickCatalog: (CatalogItem) -> Unit,
 ) {
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var loadingOffers by remember { mutableStateOf(false) }
@@ -308,15 +317,51 @@ fun SearchScreen(
     var offers by remember { mutableStateOf<List<Offer>?>(null) }
     var catalog by remember { mutableStateOf<List<CatalogItem>?>(null) }
     var onlyMine by remember { mutableStateOf(true) }
+    var scanError by remember { mutableStateOf<String?>(null) }
     val plz = store.plz
     val myStores = store.stores
     val loading = loadingOffers || loadingCatalog
 
     BackHandler(onBack = onClose)
 
+    /** Barcode nachschlagen und direkt zum Anlegen öffnen (mit Prospektbild, falls gerade im Angebot). */
+    fun lookupBarcode(code: String) {
+        if (loading) return
+        query = code
+        offers = null
+        catalog = null
+        offerError = null
+        catalogError = null
+        loadingCatalog = true
+        scope.launch {
+            try {
+                val item = withContext(Dispatchers.IO) { Catalog.byBarcode(code) }
+                if (item == null) {
+                    catalog = emptyList()
+                    catalogError = "Zum Barcode $code ist kein Produkt bekannt. Versuch es mit dem Namen " +
+                        "oder über „Ohne Suche anlegen“."
+                } else {
+                    val withImage = if (Regex("\\d{5}").matches(plz)) {
+                        val found = withContext(Dispatchers.IO) {
+                            runCatching { Marktguru.search(item.displayName, plz) }.getOrDefault(emptyList())
+                        }
+                        withOfferImage(item, found)
+                    } else item
+                    onPickCatalog(withImage)
+                }
+            } catch (e: Exception) {
+                catalog = emptyList()
+                catalogError = "Produktkatalog nicht erreichbar – später noch einmal versuchen."
+            } finally {
+                loadingCatalog = false
+            }
+        }
+    }
+
     fun search() {
         val q = query.trim()
         if (q.isBlank() || loading) return
+        Catalog.normalizeBarcode(q)?.let { lookupBarcode(it); return }
         offerError = null
         catalogError = null
         // Angebote (Marktguru) – braucht die PLZ
@@ -361,10 +406,21 @@ fun SearchScreen(
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onManual) { Text("Ohne Suche anlegen") }
             }
+            OutlinedButton(
+                onClick = {
+                    scanError = null
+                    BarcodeScan.start(ctx,
+                        onCode = { lookupBarcode(it) },
+                        onError = { scanError = it })
+                },
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("📷  Barcode scannen") }
+            scanError?.let { Hint(it) }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = { Text("Artikel suchen, z. B. Nutella") },
+                placeholder = { Text("Name oder Barcode, z. B. Nutella") },
                 singleLine = true,
                 trailingIcon = {
                     if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
@@ -496,6 +552,10 @@ fun ProductDialog(
                         Spacer(Modifier.size(8.dp))
                         TextButton(onClick = { image = "" }) { Text("Bild entfernen") }
                     }
+                }
+                if (initial.ean.isNotBlank()) {
+                    Text("EAN ${initial.ean}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Field("Name", names, { names = it }, "z. B. Nutella")
                 tip?.let {

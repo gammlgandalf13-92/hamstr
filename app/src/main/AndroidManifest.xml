@@ -27,6 +27,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Barcode-Scanner von Google schon bei der Installation laden statt beim ersten Scan -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
+
         <!-- Übergibt die heruntergeladene Update-APK an den Android-Installer -->
         <provider
             android:name="androidx.core.content.FileProvider"
