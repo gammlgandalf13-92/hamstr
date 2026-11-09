@@ -1,6 +1,11 @@
 package de.hamstr.app
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.net.Uri
+import android.os.Build
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
@@ -29,8 +34,50 @@ object Images {
         null
     }
 
+    /** Eigenes Foto übernehmen: auf ca. 512 px verkleinern und als Datei speichern. Blockierend. */
+    fun importFrom(context: Context, uri: Uri, productId: String): String? = try {
+        val resolver = context.contentResolver
+        fun sampleFor(w: Int, h: Int): Int {
+            var s = 1
+            while (w / (s * 2) >= 512 && h / (s * 2) >= 512) s *= 2
+            return s
+        }
+        val bmp: Bitmap? = if (Build.VERSION.SDK_INT >= 28) {
+            // ImageDecoder beachtet die Drehung aus dem Foto (EXIF)
+            ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+                decoder.setTargetSampleSize(sampleFor(info.size.width, info.size.height))
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } else {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            val opts = BitmapFactory.Options().apply { inSampleSize = sampleFor(bounds.outWidth, bounds.outHeight) }
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+        }
+        if (bmp == null) null
+        else {
+            val png = bmp.hasAlpha()
+            val target = File(dir(context), "$productId-own-${System.currentTimeMillis()}." + if (png) "png" else "jpg")
+            target.outputStream().use {
+                bmp.compress(if (png) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, 88, it)
+            }
+            bmp.recycle()
+            target.absolutePath
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** Alle Bilder eines Produkts löschen. */
     fun delete(context: Context, productId: String) {
-        File(dir(context), "$productId.img").delete()
+        dir(context).listFiles()?.filter { it.name.startsWith(productId) }?.forEach { it.delete() }
+    }
+
+    /** Nicht mehr benutzte Bilder eines Produkts löschen (z. B. ein vorher gewähltes eigenes Foto). */
+    fun cleanup(context: Context, productId: String, keep: String) {
+        dir(context).listFiles()
+            ?.filter { it.name.startsWith(productId) && it.absolutePath != keep && it.name != "$productId.img" }
+            ?.forEach { it.delete() }
     }
 
     /** Für die Anzeige: lokale Pfade als Datei, alles andere als URL. */

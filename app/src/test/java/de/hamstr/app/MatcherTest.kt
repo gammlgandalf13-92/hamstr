@@ -135,6 +135,11 @@ class MatcherTest {
         val products = listOf(catalog, offerImg, noImg, legacy, brandWithImg, brandNoImg)
         val hits = products.map { p -> Matcher.match(p, o("https://cdn/img.webp"), stores, today)!! }
 
+        // eigenes Foto wird nie ersetzt
+        val own = nutella.copy(id = "own", image = "/x/own.jpg", imageSource = "own")
+        val ownHit = Matcher.match(own, o("https://cdn/img.webp"), stores, today)!!
+        assertTrue(Checker.imageUpgrades(listOf(own), listOf(ownHit)).isEmpty())
+
         val up = Checker.imageUpgrades(products, hits)
         assertEquals(setOf("c", "n", "l", "bn"), up.keys)   // Prospektbild und Marke mit Bild bleiben
         assertEquals("https://cdn/img.webp", up["c"])

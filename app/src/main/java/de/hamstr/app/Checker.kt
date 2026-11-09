@@ -131,6 +131,7 @@ object Checker {
         for (p in products) {
             val upgradable = when {
                 p.image.isBlank() -> true
+                p.imageSource == "own" -> false      // eigenes Foto nie ersetzen
                 p.names.isEmpty() -> false
                 else -> p.imageSource != "offer"
             }

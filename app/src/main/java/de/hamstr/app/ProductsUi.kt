@@ -1,6 +1,9 @@
 package de.hamstr.app
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -131,6 +134,7 @@ fun ProductsScreen(store: Store) {
         val i = products.indexOfFirst { it.id == p.id }
         if (i >= 0) products[i] = p else products.add(p)
         persist()
+        Images.cleanup(ctx, p.id, keep = p.image)
         // Bild aus dem Angebot aufs Handy kopieren, damit es nicht mit dem Angebot verschwindet
         if (p.image.startsWith("http")) {
             scope.launch {
@@ -534,6 +538,28 @@ fun ProductDialog(
     var maxPrice by remember { mutableStateOf(initial.maxPrice?.let { "%.2f".format(Locale.GERMANY, it) }.orEmpty()) }
     var stores by remember { mutableStateOf(initial.stores.joinToString(", ")) }
     var image by remember { mutableStateOf(initial.image) }
+    var imageSource by remember { mutableStateOf(initial.imageSource) }
+    var imageBusy by remember { mutableStateOf(false) }
+    var imageError by remember { mutableStateOf<String?>(null) }
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    // Android-Fotoauswahl – braucht keine Berechtigung
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            imageBusy = true
+            imageError = null
+            scope.launch {
+                val local = withContext(Dispatchers.IO) { Images.importFrom(ctx, uri, initial.id) }
+                if (local != null) {
+                    image = local
+                    imageSource = "own"
+                } else {
+                    imageError = "Das Bild konnte nicht geladen werden."
+                }
+                imageBusy = false
+            }
+        }
+    }
     // Weitere Optionen nur aufklappen, wenn dort schon etwas eingetragen ist
     var advanced by remember {
         mutableStateOf(initial.maxPrice != null || initial.exclude.isNotEmpty() ||
@@ -546,13 +572,25 @@ fun ProductDialog(
         title = { Text(if (isNew) "Neues Produkt" else "Produkt bearbeiten") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                if (image.isNotBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ProductImage(image, 64.dp)
-                        Spacer(Modifier.size(8.dp))
-                        TextButton(onClick = { image = "" }) { Text("Bild entfernen") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ProductImage(image, 64.dp)
+                    Spacer(Modifier.size(8.dp))
+                    Column {
+                        TextButton(
+                            onClick = {
+                                pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            enabled = !imageBusy,
+                        ) { Text(if (image.isBlank()) "Bild wählen" else "Bild ändern") }
+                        if (image.isNotBlank()) {
+                            TextButton(onClick = { image = ""; imageSource = "" }, enabled = !imageBusy) {
+                                Text("Bild entfernen")
+                            }
+                        }
                     }
+                    if (imageBusy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
+                imageError?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                 if (initial.ean.isNotBlank()) {
                     Text("EAN ${initial.ean}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -603,7 +641,7 @@ fun ProductDialog(
                         maxPrice = maxPrice.replace(",", ".").trim().toDoubleOrNull(),
                         stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) },
                         image = image,
-                        imageSource = if (image.isBlank()) "" else initial.imageSource,
+                        imageSource = if (image.isBlank()) "" else imageSource,
                     )
                 )
             }) { Text("Speichern") }

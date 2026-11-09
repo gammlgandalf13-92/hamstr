@@ -17,7 +17,7 @@ data class Product(
     val maxPrice: Double? = null,
     val stores: List<String> = emptyList(),  // leer = Märkte aus den Einstellungen
     val image: String = "",                  // lokaler Dateipfad oder URL, optional
-    val imageSource: String = "",            // "offer" (Prospekt), "catalog" (Open Food Facts), "" = unbekannt
+    val imageSource: String = "",            // "offer" (Prospekt), "catalog" (Open Food Facts), "own" (eigenes Foto), "" = unbekannt
     val ean: String = "",                    // Barcode aus Katalog/Scan – zum Wiedererkennen beim Anlegen
 ) {
     val label: String
