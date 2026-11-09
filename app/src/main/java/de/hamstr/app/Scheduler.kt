@@ -26,7 +26,8 @@ class CheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
 }
 
 object Scheduler {
-    const val DAILY = "hamstr-daily"
+    const val DAILY = "hamstr-daily"          // alter täglicher Plan (bis 1.0.23) – wird entfernt
+    const val SCHEDULED = "hamstr-scheduled"
     const val NOW = "hamstr-now"
     const val UPDATES = "hamstr-updates"
 
@@ -34,7 +35,8 @@ object Scheduler {
 
     /** Beim App-Start: täglichen Check sicherstellen, ohne einen bestehenden Plan zu verschieben. */
     fun ensureScheduled(context: Context) {
-        schedule(context, Store(context).hour, ExistingPeriodicWorkPolicy.KEEP)
+        WorkManager.getInstance(context).cancelUniqueWork(DAILY)
+        scheduleNext(context, replace = false)
         // Update-Prüfung alle 6 Stunden, unabhängig vom Angebots-Check
         val updates = PeriodicWorkRequestBuilder<UpdateWorker>(6, TimeUnit.HOURS)
             .setInitialDelay(30, TimeUnit.MINUTES)
@@ -43,20 +45,24 @@ object Scheduler {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(UPDATES, ExistingPeriodicWorkPolicy.KEEP, updates)
     }
 
-    fun schedule(
-        context: Context,
-        hour: Int,
-        policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
-    ) {
+    /**
+     * Nächste geplante Prüfung einplanen. [replace] = true ersetzt einen vorhandenen Termin
+     * (nach Änderung der Prüfzeiten oder am Ende einer Prüfung), sonst bleibt er bestehen.
+     */
+    fun scheduleNext(context: Context, replace: Boolean) {
+        val wm = WorkManager.getInstance(context)
         val now = LocalDateTime.now()
-        var next = now.toLocalDate().atTime(hour, 15)
-        if (!next.isAfter(now)) next = next.plusDays(1)
-        val request = PeriodicWorkRequestBuilder<CheckWorker>(24, TimeUnit.HOURS)
-            .setInitialDelay(Duration.between(now, next).toMinutes(), TimeUnit.MINUTES)
+        val next = Schedule.nextRun(Store(context).schedule, now)
+        if (next == null) {
+            wm.cancelUniqueWork(SCHEDULED)
+            return
+        }
+        val request = OneTimeWorkRequestBuilder<ScheduledCheckWorker>()
+            .setInitialDelay(Duration.between(now, next).seconds.coerceAtLeast(0), TimeUnit.SECONDS)
             .setConstraints(network)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(DAILY, policy, request)
+        wm.enqueueUniqueWork(SCHEDULED, if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP, request)
     }
 
     fun runNow(context: Context) {

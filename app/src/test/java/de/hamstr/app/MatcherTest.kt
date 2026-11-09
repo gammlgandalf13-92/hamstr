@@ -214,6 +214,29 @@ class MatcherTest {
         assertEquals("4008400401621", productFromCatalog(item).ean)
     }
 
+    @Test fun scheduleNextRun() {
+        val mon = java.time.LocalDateTime.of(2026, 11, 9, 10, 0)   // Montag, 10:00
+        val daily = CheckSlot(Schedule.ALL_DAYS, 7, 15)
+        val evening = CheckSlot(Schedule.ALL_DAYS, 18, 0)
+        val saturday = CheckSlot(setOf(java.time.DayOfWeek.SATURDAY), 9, 0)
+        // täglich 7:15 → morgen früh
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 10, 7, 15), Schedule.nextRun(listOf(daily), mon))
+        // zweimal täglich → heute Abend
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 9, 18, 0), Schedule.nextRun(listOf(daily, evening), mon))
+        // wöchentlich samstags
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 14, 9, 0), Schedule.nextRun(listOf(saturday), mon))
+        // genau jetzt zählt nicht → nächste Woche
+        val sat9 = java.time.LocalDateTime.of(2026, 11, 14, 9, 0)
+        assertEquals(java.time.LocalDateTime.of(2026, 11, 21, 9, 0), Schedule.nextRun(listOf(saturday), sat9))
+        // kein Tag gewählt → nichts geplant
+        assertNull(Schedule.nextRun(listOf(CheckSlot(emptySet(), 8, 0)), mon))
+        // Texte
+        assertEquals("werktags", Schedule.describeDays(Schedule.WEEKDAYS))
+        assertEquals("täglich", Schedule.describeDays(Schedule.ALL_DAYS))
+        // Speichern und Laden
+        assertEquals(saturday, CheckSlot.fromJson(saturday.toJson()))
+    }
+
     @Test fun dedupeAndMessage() {
         val a = hit(nutella, offer("1", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.99, 4.49))!!
         val c = hit(nutella, offer("3", "REWE", "rewe", "Ferrero", "Nutella", "450 g", 2.79, 4.49))!!

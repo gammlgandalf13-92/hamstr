@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 class UpdateWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         UpdateNotifications.check(applicationContext)
+        Scheduler.scheduleNext(applicationContext, replace = false)
         Result.success()
     }
 }

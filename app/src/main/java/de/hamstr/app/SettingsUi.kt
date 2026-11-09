@@ -70,7 +70,6 @@ fun SettingsScreen(store: Store) {
     val scope = rememberCoroutineScope()
 
     var plz by remember { mutableStateOf(store.plz) }
-    var hour by remember { mutableStateOf(store.hour.toString()) }
     var radius by remember { mutableFloatStateOf(store.radiusKm.toFloat()) }
     var center by remember { mutableStateOf(store.center?.let { it.first to it.second }) }
     var centerIsLocation by remember { mutableStateOf(store.centerIsLocation) }
@@ -83,15 +82,11 @@ fun SettingsScreen(store: Store) {
     var showLog by remember { mutableStateOf(store.showLog) }
 
     val plzOk = Regex("\\d{5}").matches(plz.trim())
-    val hourValue = hour.trim().toIntOrNull()
-    val hourOk = hourValue != null && hourValue in 0..23
 
     fun saveAll() {
         store.plz = plz.trim()
-        store.hour = hourValue ?: 7
         store.radiusKm = radius.roundToInt()
         center?.let { store.center = Triple(it.first, it.second, plz.trim()) }
-        Scheduler.schedule(ctx, store.hour)
         saved = true
     }
 
@@ -200,18 +195,14 @@ fun SettingsScreen(store: Store) {
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
 
+        Button(enabled = plzOk, onClick = { saveAll() }) { Text("PLZ und Umkreis speichern") }
+        if (saved) Text("Gespeichert.", style = MaterialTheme.typography.bodySmall)
+
         MarketList(store, chainsVersion)
 
         // ---------------- Wann
         HorizontalDivider()
-        OutlinedTextField(
-            value = hour, onValueChange = { hour = it; saved = false }, label = { Text("Täglicher Check um (Uhr)") },
-            isError = !hourOk, singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Button(enabled = plzOk && hourOk, onClick = { saveAll() }) { Text("Speichern") }
-        if (saved) Text("Gespeichert. Nächster Check täglich gegen ${store.hour}:15 Uhr.")
+        ScheduleSection(store)
 
         // ---------------- Updates
         HorizontalDivider()

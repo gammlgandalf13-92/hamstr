@@ -31,6 +31,16 @@ class Store(context: Context) {
         get() = prefs.getInt("hour", 7)
         set(v) = prefs.edit().putInt("hour", v.coerceIn(0, 23)).apply()
 
+    /** Prüfzeiten. Ohne Eintrag: wie bisher täglich zur alten Uhrzeit (Viertel nach). */
+    var schedule: List<CheckSlot>
+        get() {
+            val raw = prefs.getString("schedule", null) ?: return listOf(CheckSlot(Schedule.ALL_DAYS, hour, 15))
+            val arr = JSONArray(raw)
+            return (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(CheckSlot::fromJson) }
+                .ifEmpty { listOf(CheckSlot(Schedule.ALL_DAYS, hour, 15)) }
+        }
+        set(v) = prefs.edit().putString("schedule", JSONArray(v.map { it.toJson() }).toString()).apply()
+
     /** Version, für die schon eine Update-Benachrichtigung kam. */
     var updateNotified: Int
         get() = prefs.getInt("updateNotified", 0)
