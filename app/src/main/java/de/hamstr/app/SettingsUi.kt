@@ -251,13 +251,16 @@ private fun UpdateSection(store: Store) {
     var latest by remember { mutableStateOf<UpdateInfo?>(null) }
     var checked by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
 
     fun check() {
         busy = true
+        checking = true
         status = null
         scope.launch {
+            val started = System.currentTimeMillis()
             try {
                 latest = withContext(Dispatchers.IO) { Updater.latest() }
                 checked = true
@@ -265,6 +268,10 @@ private fun UpdateSection(store: Store) {
             } catch (e: Exception) {
                 status = e.message ?: "Prüfung fehlgeschlagen."
             }
+            // Animation kurz sichtbar lassen, auch wenn GitHub sehr schnell antwortet
+            val elapsed = System.currentTimeMillis() - started
+            if (elapsed < 800) kotlinx.coroutines.delay(800 - elapsed)
+            checking = false
             busy = false
         }
     }
@@ -303,11 +310,21 @@ private fun UpdateSection(store: Store) {
         }
         checked && info != null -> Text("Du hast die neueste Version.", style = MaterialTheme.typography.bodySmall)
     }
-    OutlinedButton(onClick = { check() }, enabled = !busy) { Text("Nach Updates suchen") }
-    if (busy && progress > 0f) {
-        androidx.compose.material3.LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-    } else if (busy) {
-        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = { check() }, enabled = !busy) {
+            Text(if (checking) "Suche…" else "Nach Updates suchen")
+        }
+        if (checking) {
+            Spacer(Modifier.size(12.dp))
+            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+        }
+    }
+    if (busy && !checking) {
+        if (progress > 0f) {
+            androidx.compose.material3.LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        } else {
+            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+        }
     }
     status?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
 }
