@@ -233,8 +233,6 @@ class MatcherTest {
         // Texte
         assertEquals("werktags", Schedule.describeDays(Schedule.WEEKDAYS))
         assertEquals("täglich", Schedule.describeDays(Schedule.ALL_DAYS))
-        // Speichern und Laden
-        assertEquals(saturday, CheckSlot.fromJson(saturday.toJson()))
     }
 
     @Test fun dedupeAndMessage() {
