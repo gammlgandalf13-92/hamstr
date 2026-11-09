@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- Kamera-Fotos landen hier kurz, bevor Hamstr sie verkleinert übernimmt -->
+    <cache-path name="photos" path="photos/" />
 </paths>

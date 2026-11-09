@@ -544,20 +544,42 @@ fun ProductDialog(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     // Android-Fotoauswahl – braucht keine Berechtigung
-    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) {
-            imageBusy = true
-            imageError = null
-            scope.launch {
-                val local = withContext(Dispatchers.IO) { Images.importFrom(ctx, uri, initial.id) }
-                if (local != null) {
-                    image = local
-                    imageSource = "own"
-                } else {
-                    imageError = "Das Bild konnte nicht geladen werden."
-                }
-                imageBusy = false
+    fun takeOver(uri: android.net.Uri, temp: java.io.File? = null) {
+        imageBusy = true
+        imageError = null
+        scope.launch {
+            val local = withContext(Dispatchers.IO) {
+                Images.importFrom(ctx, uri, initial.id).also { temp?.delete() }
             }
+            if (local != null) {
+                image = local
+                imageSource = "own"
+            } else {
+                imageError = "Das Bild konnte nicht geladen werden."
+            }
+            imageBusy = false
+        }
+    }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) takeOver(uri)
+    }
+    // Kamera: Foto in eine temporäre Datei, danach verkleinert übernehmen (keine Kamera-Berechtigung nötig)
+    var photoFile by remember { mutableStateOf<java.io.File?>(null) }
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val file = photoFile
+        if (ok && file != null && file.length() > 0) {
+            takeOver(androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file), file)
+        } else {
+            file?.delete()
+        }
+    }
+    fun startCamera() {
+        try {
+            val file = java.io.File(java.io.File(ctx.cacheDir, "photos").apply { mkdirs() }, "${initial.id}.jpg")
+            photoFile = file
+            takePhoto.launch(androidx.core.content.FileProvider.getUriForFile(ctx, ctx.packageName + ".files", file))
+        } catch (e: Exception) {
+            imageError = "Keine Kamera-App gefunden."
         }
     }
     // Weitere Optionen nur aufklappen, wenn dort schon etwas eingetragen ist
@@ -582,6 +604,7 @@ fun ProductDialog(
                             },
                             enabled = !imageBusy,
                         ) { Text(if (image.isBlank()) "Bild wählen" else "Bild ändern") }
+                        TextButton(onClick = { startCamera() }, enabled = !imageBusy) { Text("Foto aufnehmen") }
                         if (image.isNotBlank()) {
                             TextButton(onClick = { image = ""; imageSource = "" }, enabled = !imageBusy) {
                                 Text("Bild entfernen")
