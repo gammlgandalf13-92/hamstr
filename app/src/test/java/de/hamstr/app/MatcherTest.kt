@@ -373,4 +373,28 @@ class MatcherTest {
         )
         assertEquals(listOf("c"), ProductTransfer.newOnes(mine, incoming).map { it.id })
     }
+
+    // ---------------- Am Markt erinnern
+    @Test fun atStoreMessage() {
+        val nutellaRewe = SavedHit("Ferrero Nutella", "", "https://m/1", "2026-11-07", store = "REWE", storeSlug = "rewe",
+            price = 1.99, validFrom = "2026-11-02")
+        val colaRewe = SavedHit("Coca-Cola", "", "https://m/2", "2026-11-07", store = "REWE", storeSlug = "rewe",
+            price = 0.99, validFrom = "2026-11-02")
+        val nextWeek = SavedHit("Milka", "", "https://m/3", "2026-11-14", store = "REWE", storeSlug = "rewe",
+            price = 0.89, validFrom = "2026-11-09")
+        val lidl = SavedHit("Oatly", "", "https://m/4", "2026-11-07", store = "Lidl", storeSlug = "lidl", price = 1.49)
+        val list = listOf(ShoppingItem.fromHit(nutellaRewe), ShoppingItem("x", "Milch"))
+        val (title, body) = AtStore.message("rewe", "REWE", list, listOf(nutellaRewe, colaRewe, nextWeek, lidl), today)!!
+        assertEquals("Du bist bei REWE", title)
+        assertEquals("Auf deiner Liste: Ferrero Nutella 1,99 €\nAußerdem im Angebot: Coca-Cola 0,99 €", body)
+        // Nichts für diesen Markt → keine Meldung
+        assertNull(AtStore.message("penny", "Penny", list, listOf(nutellaRewe, lidl), today))
+        // Überwacht werden nur eingeschaltete Ketten, die nächsten zuerst
+        val shops = listOf(
+            NearbyStore("REWE", "rewe", 0.0, 0.0, 2.0, ""), NearbyStore("Lidl", "lidl", 0.0, 0.0, 1.0, ""),
+            NearbyStore("Globus", "globus", 0.0, 0.0, 0.5, ""),
+        )
+        assertEquals(listOf("lidl", "rewe"), AtStore.pick(shops, listOf("rewe", "lidl")).map { it.chain })
+        assertEquals("Ferrero Nutella\nMilch", ShareText.names(list + ShoppingItem("y", "Brot", done = true)))
+    }
 }

@@ -36,6 +36,7 @@ object Scheduler {
     /** Beim App-Start: täglichen Check sicherstellen, ohne einen bestehenden Plan zu verschieben. */
     fun ensureScheduled(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(DAILY)
+        runCatching { AtStore.sync(context) }
         scheduleNext(context, replace = false)
         // Update-Prüfung alle 6 Stunden, unabhängig vom Angebots-Check
         val updates = PeriodicWorkRequestBuilder<UpdateWorker>(6, TimeUnit.HOURS)

@@ -18,6 +18,8 @@ object Notifier {
     private const val CHANNEL = "angebote"
     private const val CHANNEL_UPDATES = "updates"
     private const val UPDATE_ID = 4711
+    private const val CHANNEL_STORE = "markt"
+    const val EXTRA_TAB = "tab"
 
     private fun ensureChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -25,6 +27,13 @@ object Notifier {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL, "Angebote", NotificationManager.IMPORTANCE_DEFAULT).apply {
                     description = "Meldungen, wenn deine Produkte im Angebot sind"
+                }
+            )
+        }
+        if (nm.getNotificationChannel(CHANNEL_STORE) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_STORE, "Am Markt", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Hinweis, wenn du in einem Markt bist, in dem etwas für dich im Angebot ist"
                 }
             )
         }
@@ -49,6 +58,12 @@ object Notifier {
         val body = hit.body(lastSeen, ref)
         val open = Intent(Intent.ACTION_VIEW, Uri.parse(hit.offer.url))
         post(context, hit.dedupeKey.hashCode(), hit.title(), body, open)
+    }
+
+    /** „Du bist bei REWE“ – Antippen öffnet die Einkaufsliste. */
+    fun atStore(context: Context, chain: String, title: String, body: String): Boolean {
+        val open = Intent(context, MainActivity::class.java).putExtra(EXTRA_TAB, 1)
+        return post(context, ("markt|$chain").hashCode(), title, body, open, CHANNEL_STORE)
     }
 
     fun info(context: Context, title: String, body: String) {

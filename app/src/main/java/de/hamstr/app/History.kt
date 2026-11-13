@@ -140,6 +140,10 @@ object ShareText {
         return "$store${h.title}$price$validity" + (if (h.url.isNotBlank()) "\n${h.url}" else "")
     }
 
+    /** Nur die Artikel, einer pro Zeile – Listen-Apps machen daraus oft einzelne Einträge. */
+    fun names(items: List<ShoppingItem>): String =
+        items.filter { !it.done }.joinToString("\n") { it.title }
+
     /** Einkaufsliste als Text, nach Markt gruppiert. Erledigtes bleibt weg. */
     fun list(items: List<ShoppingItem>, today: LocalDate = LocalDate.now()): String {
         val open = items.filter { !it.done }

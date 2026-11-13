@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Nur ungefährer Standort – reicht für die PLZ -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- „Am Markt erinnern“ (Test, nur nach Einschalten): genauer Standort im Hintergrund für Geofencing -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Überwachte Filialen nach Neustart wieder einrichten -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Updates installieren (Android fragt den Nutzer trotzdem jedes Mal) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -37,6 +42,14 @@
                 <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
+
+        <receiver android:name=".GeofenceReceiver" android:exported="false" />
+        <receiver android:name=".BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Barcode-Scanner von Google schon bei der Installation laden statt beim ersten Scan -->
         <meta-data

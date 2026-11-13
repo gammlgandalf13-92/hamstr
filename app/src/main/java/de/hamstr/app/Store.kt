@@ -190,6 +190,41 @@ class Store(context: Context) {
         prefs.edit().putString("hits", arr.toString()).apply()
     }
 
+    // ---------------- Am Markt erinnern (Test) ----------------
+    var atStoreEnabled: Boolean
+        get() = prefs.getBoolean("atStoreEnabled", false)
+        set(v) = prefs.edit().putBoolean("atStoreEnabled", v).apply()
+
+    var atStoreStatus: String
+        get() = prefs.getString("atStoreStatus", "").orEmpty()
+        set(v) = prefs.edit().putString("atStoreStatus", v).apply()
+
+    /** Filialen aus der letzten Umkreissuche (für die Markt-Erinnerung). */
+    fun nearbyStores(): List<NearbyStore> {
+        val arr = JSONArray(prefs.getString("nearbyStores", "[]"))
+        return (0 until arr.length()).mapNotNull { i ->
+            arr.optJSONObject(i)?.let {
+                NearbyStore(it.optString("name"), it.optString("chain"), it.optDouble("lat"), it.optDouble("lon"),
+                    it.optDouble("km"), it.optString("address"))
+            }
+        }
+    }
+
+    fun saveNearbyStores(list: List<NearbyStore>) {
+        val arr = JSONArray()
+        list.take(300).forEach {
+            arr.put(JSONObject().put("name", it.name).put("chain", it.chain).put("lat", it.lat).put("lon", it.lon)
+                .put("km", it.distanceKm).put("address", it.address))
+        }
+        prefs.edit().putString("nearbyStores", arr.toString()).apply()
+    }
+
+    /** Wann zuletzt je Kette erinnert (gegen Mehrfach-Meldungen). */
+    fun atStoreLast(): Map<String, Long> = mapFrom(prefs.getString("atStoreLast", null)) { (it as Number).toLong() }
+
+    fun saveAtStoreLast(map: Map<String, Long>) =
+        prefs.edit().putString("atStoreLast", JSONObject(map).toString()).apply()
+
     // ---------------- Preisverlauf (eigene Beobachtungen) ----------------
     fun priceLog(): Map<String, List<PricePoint>> {
         val raw = prefs.getString("priceLog", null) ?: return emptyMap()

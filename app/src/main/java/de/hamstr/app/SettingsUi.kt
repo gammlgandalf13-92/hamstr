@@ -140,6 +140,8 @@ fun SettingsScreen(store: Store) {
                     val found = withContext(Dispatchers.IO) { Geo.nearbyStores(c.first, c.second, radius.roundToInt()) }
                     nearby = found
                     store.saveChains(Markets.applyNearby(store.chains(), found))
+                    store.saveNearbyStores(found)
+                    AtStore.sync(ctx)
                     chainsVersion++
                     if (found.isEmpty()) message = "Keine Supermärkte im Umkreis gefunden – Radius vergrößern?"
                 }
@@ -217,6 +219,11 @@ fun SettingsScreen(store: Store) {
         SettingsHeader("Prüfzeiten")
         ScheduleSection(store)
 
+        // ---------------- Am Markt erinnern
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Am Markt erinnern (Test)")
+        AtStoreSection(store)
+
         // ---------------- Benachrichtigungen
         HorizontalDivider(Modifier.padding(top = 8.dp))
         SettingsHeader("Benachrichtigungen")
@@ -262,6 +269,106 @@ fun SettingsScreen(store: Store) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/**
+ * Markt-Erinnerung ein-/ausschalten. Braucht genauen Standort mit „Immer erlauben“ –
+ * Android fragt das in zwei Schritten ab (erst Standort, dann im Hintergrund).
+ */
+@Composable
+private fun AtStoreSection(store: Store) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var enabled by remember { mutableStateOf(store.atStoreEnabled && AtStore.hasPermission(ctx)) }
+    var status by remember { mutableStateOf(store.atStoreStatus) }
+    var explain by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+
+    fun activate() {
+        busy = true
+        status = "Wird eingerichtet…"
+        scope.launch {
+            // Filialen kennen wir aus der Umkreissuche; fehlt sie, jetzt nachholen
+            if (store.nearbyStores().isEmpty()) {
+                val c = store.center
+                if (c != null) {
+                    val found = withContext(Dispatchers.IO) {
+                        runCatching { Geo.nearbyStores(c.first, c.second, store.radiusKm) }.getOrDefault(emptyList())
+                    }
+                    if (found.isNotEmpty()) {
+                        store.saveNearbyStores(found)
+                        store.saveChains(Markets.applyNearby(store.chains(), found))
+                    }
+                }
+            }
+            store.atStoreEnabled = true
+            enabled = true
+            withContext(Dispatchers.IO) { AtStore.sync(ctx) }
+            kotlinx.coroutines.delay(1500) // Ergebnis von Android abwarten
+            status = store.atStoreStatus
+            busy = false
+        }
+    }
+
+    val backgroundPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (AtStore.hasPermission(ctx)) activate()
+        else status = "Ohne Standort „Immer erlauben“ geht es nicht. Du kannst das unter „Akku-Einstellungen“ → Berechtigungen → Standort nachholen."
+    }
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        when {
+            result[Manifest.permission.ACCESS_FINE_LOCATION] != true ->
+                status = "Dafür braucht Hamstr den genauen Standort (nicht nur ungefähr)."
+            android.os.Build.VERSION.SDK_INT >= 29 && !AtStore.hasPermission(ctx) ->
+                backgroundPermission.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            else -> activate()
+        }
+    }
+
+    SettingsRow(
+        "Hinweis beim Betreten eines Marktes",
+        "Bist du ein paar Minuten in einer Filiale deiner Märkte, zeigt Hamstr, was dort auf deiner Einkaufsliste steht " +
+            "und was diese Woche für dich im Angebot ist. Pro Markt höchstens alle 3 Stunden.",
+        onClick = if (busy) null else ({
+            if (enabled) {
+                store.atStoreEnabled = false
+                enabled = false
+                AtStore.sync(ctx)
+                status = ""
+            } else explain = true
+        }),
+    ) {
+        if (busy) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+        else Switch(checked = enabled, onCheckedChange = null)
+    }
+    if (enabled && status.isNotBlank()) {
+        Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    } else if (!enabled && status.isNotBlank() && !busy) {
+        Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+    }
+
+    if (explain) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { explain = false },
+            title = { Text("Standort im Hintergrund") },
+            text = {
+                Text(
+                    "Damit Hamstr merkt, dass du in einem Markt bist, braucht es den genauen Standort mit " +
+                        "„Immer erlauben“. Android fragt das gleich in zwei Schritten ab – beim zweiten bitte " +
+                        "„Immer zulassen“ wählen.\n\nAndroid prüft selbst, ob du in der Nähe einer Filiale bist; " +
+                        "Hamstr fragt den Standort nicht laufend ab und schickt ihn nirgendwohin."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    explain = false
+                    locationPermission.launch(arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ))
+                }) { Text("Weiter") }
+            },
+            dismissButton = { TextButton(onClick = { explain = false }) { Text("Abbrechen") } },
+        )
     }
 }
 

@@ -112,17 +112,27 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     /** Geteilte Produktliste, die mit „Öffnen mit Hamstr“ hereinkam. */
     private val incoming = mutableStateOf<Uri?>(null)
+    /** Tab aus einer Benachrichtigung (z. B. „Du bist bei REWE“ → Einkaufsliste). */
+    private val openTab = mutableStateOf<Int?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Scheduler.ensureScheduled(this)
-        if (savedInstanceState == null) incoming.value = Transfer.uriFrom(intent)
-        setContent { HamstrTheme { HamstrApp(incoming.value) { incoming.value = null } } }
+        if (savedInstanceState == null) {
+            incoming.value = Transfer.uriFrom(intent)
+            openTab.value = intent?.getIntExtra(Notifier.EXTRA_TAB, -1)?.takeIf { it >= 0 }
+        }
+        setContent {
+            HamstrTheme {
+                HamstrApp(incoming.value, { incoming.value = null }, openTab.value, { openTab.value = null })
+            }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         Transfer.uriFrom(intent)?.let { incoming.value = it }
+        intent.getIntExtra(Notifier.EXTRA_TAB, -1).takeIf { it >= 0 }?.let { openTab.value = it }
     }
 }
 
@@ -143,7 +153,12 @@ private const val TAB_PRODUCTS = 2
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HamstrApp(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
+fun HamstrApp(
+    incoming: Uri? = null,
+    onIncomingHandled: () -> Unit = {},
+    openTab: Int? = null,
+    onOpenTabHandled: () -> Unit = {},
+) {
     val ctx = LocalContext.current
     val store = remember { Store(ctx) }
     val scope = rememberCoroutineScope()
@@ -156,6 +171,10 @@ fun HamstrApp(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
     var shoppingVersion by remember { mutableIntStateOf(0) }
     var productsVersion by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
+    var shareMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(openTab) {
+        openTab?.let { tab = it; settingsOpen = false; shoppingVersion++; onOpenTabHandled() }
+    }
 
     val workFlow = remember { WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkFlow(Scheduler.NOW) }
     val work by workFlow.collectAsState(initial = emptyList())
@@ -222,8 +241,26 @@ fun HamstrApp(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
                         }
                     }
                     if (!settingsOpen && tab == TAB_SHOPPING && shoppingCount > 0) {
-                        IconButton(onClick = { shareText(ctx, ShareText.list(store.shoppingList()), "Einkaufsliste teilen") }) {
-                            Icon(Icons.Filled.Share, contentDescription = "Einkaufsliste teilen")
+                        Box {
+                            IconButton(onClick = { shareMenuOpen = true }) {
+                                Icon(Icons.Filled.Share, contentDescription = "Einkaufsliste teilen")
+                            }
+                            DropdownMenu(expanded = shareMenuOpen, onDismissRequest = { shareMenuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Mit Märkten und Preisen") },
+                                    onClick = {
+                                        shareMenuOpen = false
+                                        shareText(ctx, ShareText.list(store.shoppingList()), "Einkaufsliste teilen")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Nur Artikel, einer pro Zeile") },
+                                    onClick = {
+                                        shareMenuOpen = false
+                                        shareText(ctx, ShareText.names(store.shoppingList()), "Einkaufsliste teilen")
+                                    },
+                                )
+                            }
                         }
                     }
                     if (!settingsOpen) {
