@@ -48,6 +48,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import java.time.LocalDate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -269,96 +276,166 @@ fun HitsScreen(
         store.products().associate { p -> p.id to refs[p.ean]?.ref }
     }
 
-    PullToRefreshBox(isRefreshing = running, onRefresh = onCheck, modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                Text(
-                    when {
-                        running -> "Suche nach Angeboten…"
-                        lastRun == 0L -> "Noch keine Prüfung gelaufen. Zum Prüfen nach unten ziehen."
-                        else -> "Zuletzt geprüft: " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(lastRun)) +
-                            " · zum Aktualisieren nach unten ziehen"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // Verständliche Meldung statt Technik
-            when {
-                status == "no_plz" -> item {
-                    EmptyState(Icons.Filled.LocationOn, "Wo kaufst du ein?",
-                        "Trag deine PLZ ein, damit Hamstr Angebote in deiner Region findet.",
-                        "Zu den Einstellungen", onOpenSettings)
-                }
-                status == "no_products" -> item {
-                    EmptyState(Icons.AutoMirrored.Filled.List, "Noch keine Produkte",
-                        "Leg fest, was Hamstr für dich beobachten soll – per Suche oder Barcode.",
-                        "Produkt hinzufügen", onOpenProducts)
-                }
-                status == "failed" && hits.isEmpty() -> item {
-                    EmptyState(Icons.Filled.Refresh, "Gerade kein Abruf möglich",
-                        "Die Angebote konnten nicht geladen werden. Bitte später noch einmal prüfen.",
-                        if (running) null else "Erneut versuchen", onCheck)
-                }
-                hits.isEmpty() && lastRun == 0L -> item {
-                    EmptyState(Icons.Filled.Search, "Noch nichts geprüft",
-                        "Hamstr prüft automatisch zu deinen Prüfzeiten. Du kannst auch sofort nachsehen.",
-                        if (running) null else "Jetzt prüfen", onCheck)
-                }
-                hits.isEmpty() -> item {
-                    EmptyState(Icons.Outlined.ShoppingCart, "Keine Angebote",
-                        "Zu deinen Produkten gibt es gerade keine Angebote. Hamstr sagt dir Bescheid, sobald sich das ändert.")
+    val today = remember(version) { LocalDate.now() }
+    val scope = rememberCoroutineScope()
+    // Wochen: diese, nächste und – falls vorhanden – „später“
+    val weekHits = remember(hits, today) {
+        (0..2).map { w -> hits.filter { w in Matcher.weeksOf(it.validFrom, it.validTo, today) } }
+    }
+    val weeks = if (weekHits[2].isNotEmpty()) listOf(0, 1, 2) else listOf(0, 1)
+    // Zustände ohne Angebote (keine PLZ, keine Produkte, Fehler, noch nie geprüft): ohne Wochen-Tabs
+    val showTabs = hits.isNotEmpty() && status != "no_plz" && status != "no_products"
+    // Start in der ersten Woche, die etwas hat (z. B. sonntags schon die nächste Woche)
+    val pager = rememberPagerState(initialPage = weeks.firstOrNull { weekHits[it].isNotEmpty() } ?: 0) { weeks.size }
+
+    Column(Modifier.fillMaxSize()) {
+        if (showTabs) {
+            TabRow(selectedTabIndex = pager.currentPage.coerceAtMost(weeks.lastIndex)) {
+                weeks.forEachIndexed { i, w ->
+                    val label = when (w) { 0 -> "Diese Woche"; 1 -> "Nächste Woche"; else -> "Später" }
+                    Tab(
+                        selected = pager.currentPage == i,
+                        onClick = { scope.launch { pager.animateScrollToPage(i) } },
+                        text = { Text("$label (${weekHits[w].size})", maxLines = 1) },
+                    )
                 }
             }
-            if (status == "partial" && hits.isNotEmpty()) {
-                item { InfoBanner("Einige Produkte konnten nicht geprüft werden – die Liste ist evtl. unvollständig.") }
+        }
+        PullToRefreshBox(isRefreshing = running, onRefresh = onCheck, modifier = Modifier.weight(1f).fillMaxWidth()) {
+            if (!showTabs) {
+                HitsList(store, emptyList(), null, today, status, lastRun, running, favorites, { favorites = it },
+                    refByProduct, logEnabled, log, onCheck, onOpenProducts, onOpenSettings, hits.isEmpty())
+            } else {
+                HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
+                    val w = weeks[page]
+                    HitsList(store, weekHits[w], w, today, status, lastRun, running, favorites, { favorites = it },
+                        refByProduct, logEnabled && page == 0, log, onCheck, onOpenProducts, onOpenSettings, false)
+                }
             }
-            // Nach Markt gruppiert: Lieblingsmärkte zuerst, sonst alphabetisch
-            val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toList().sortedWith(
-                compareBy<Pair<String, List<SavedHit>>>({ Geo.chainKey(it.first) !in favorites }, { it.first.lowercase() })
+        }
+    }
+}
+
+/** Liste einer Woche: Status, Märkte mit ihren Angeboten, ggf. Prüfprotokoll. */
+@Composable
+private fun HitsList(
+    store: Store,
+    hits: List<SavedHit>,
+    week: Int?,
+    today: LocalDate,
+    status: String,
+    lastRun: Long,
+    running: Boolean,
+    favorites: Set<String>,
+    onFavorites: (Set<String>) -> Unit,
+    refByProduct: Map<String, RefPrice?>,
+    logEnabled: Boolean,
+    log: String,
+    onCheck: () -> Unit,
+    onOpenProducts: () -> Unit,
+    onOpenSettings: () -> Unit,
+    noHitsAtAll: Boolean,
+) {
+    val ctx = LocalContext.current
+    var showLog by rememberSaveable { mutableStateOf(false) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text(
+                when {
+                    running -> "Suche nach Angeboten…"
+                    lastRun == 0L -> "Noch keine Prüfung gelaufen. Zum Prüfen nach unten ziehen."
+                    else -> (week?.let { Matcher.weekRangeText(it, today) + " · " } ?: "") +
+                        "zuletzt geprüft " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(lastRun))
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            byStore.forEach { (storeName, storeHits) ->
-                item(key = "store|$storeName") {
-                    val chain = Geo.chainKey(storeName)
-                    StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
-                        favorites = store.toggleFavorite(chain)
-                    }
+        }
+        // Verständliche Meldung statt Technik
+        when {
+            status == "no_plz" -> item {
+                EmptyState(Icons.Filled.LocationOn, "Wo kaufst du ein?",
+                    "Trag deine PLZ ein, damit Hamstr Angebote in deiner Region findet.",
+                    "Zu den Einstellungen", onOpenSettings)
+            }
+            status == "no_products" -> item {
+                EmptyState(Icons.AutoMirrored.Filled.List, "Noch keine Produkte",
+                    "Leg fest, was Hamstr für dich beobachten soll – per Suche oder Barcode.",
+                    "Produkt hinzufügen", onOpenProducts)
+            }
+            noHitsAtAll && status == "failed" -> item {
+                EmptyState(Icons.Filled.Refresh, "Gerade kein Abruf möglich",
+                    "Die Angebote konnten nicht geladen werden. Bitte später noch einmal prüfen.",
+                    if (running) null else "Erneut versuchen", onCheck)
+            }
+            noHitsAtAll && lastRun == 0L -> item {
+                EmptyState(Icons.Filled.Search, "Noch nichts geprüft",
+                    "Hamstr prüft automatisch zu deinen Prüfzeiten. Du kannst auch sofort nachsehen.",
+                    if (running) null else "Jetzt prüfen", onCheck)
+            }
+            noHitsAtAll -> item {
+                EmptyState(Icons.Outlined.ShoppingCart, "Keine Angebote",
+                    "Zu deinen Produkten gibt es gerade keine Angebote. Hamstr sagt dir Bescheid, sobald sich das ändert.")
+            }
+            hits.isEmpty() && week == 0 -> item {
+                EmptyState(Icons.Outlined.ShoppingCart, "Diese Woche nichts dabei",
+                    "Zu deinen Produkten gibt es diese Woche keine Angebote. Wisch nach links für die nächste Woche.")
+            }
+            hits.isEmpty() && week == 1 -> item {
+                EmptyState(Icons.Outlined.ShoppingCart, "Noch nichts für nächste Woche",
+                    "Die Prospekte für nächste Woche erscheinen meist erst gegen Ende dieser Woche. " +
+                        "Hamstr schaut bei jeder Prüfung nach und meldet sich.")
+            }
+        }
+        if (status == "partial" && hits.isNotEmpty()) {
+            item { InfoBanner("Einige Produkte konnten nicht geprüft werden – die Liste ist evtl. unvollständig.") }
+        }
+        // Nach Markt gruppiert: Lieblingsmärkte zuerst, sonst alphabetisch
+        val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toList().sortedWith(
+            compareBy<Pair<String, List<SavedHit>>>({ Geo.chainKey(it.first) !in favorites }, { it.first.lowercase() })
+        )
+        byStore.forEach { (storeName, storeHits) ->
+            item(key = "store|$storeName") {
+                val chain = Geo.chainKey(storeName)
+                StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
+                    onFavorites(store.toggleFavorite(chain))
                 }
-                items(storeHits) { h ->
-                    val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
-                    if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
-                        OfferCard(
-                            image = h.image, title = h.title, description = h.description,
-                            price = h.price, oldPrice = h.oldPrice, validFrom = h.validFrom, validTo = h.validTo,
-                            hint = h.notes, ref = refByProduct[h.productId], onClick = { open() },
-                        )
-                    } else {
-                        // Ältere gespeicherte Treffer ohne Einzelfelder
-                        Card(Modifier.fillMaxWidth().clickable { open() }) {
-                            Row(Modifier.padding(12.dp)) {
-                                ProductImage(h.image, 72.dp)
-                                Spacer(Modifier.size(12.dp))
-                                Column {
-                                    Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(h.body, style = MaterialTheme.typography.bodyMedium)
-                                }
+            }
+            items(storeHits) { h ->
+                val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
+                if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
+                    OfferCard(
+                        image = h.image, title = h.title, description = h.description,
+                        price = h.price, oldPrice = h.oldPrice, validFrom = h.validFrom, validTo = h.validTo,
+                        hint = h.notes.split(" · ").filterNot { it.startsWith("gilt erst ab") }.joinToString(" · "),
+                        ref = refByProduct[h.productId], onClick = { open() },
+                    )
+                } else {
+                    // Ältere gespeicherte Treffer ohne Einzelfelder
+                    Card(Modifier.fillMaxWidth().clickable { open() }) {
+                        Row(Modifier.padding(12.dp)) {
+                            ProductImage(h.image, 72.dp)
+                            Spacer(Modifier.size(12.dp))
+                            Column {
+                                Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(4.dp))
+                                Text(h.body, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
                     }
                 }
             }
-            if (logEnabled && log.isNotBlank()) {
-                item {
-                    TextButton(onClick = { showLog = !showLog }) {
-                        Text(if (showLog) "Prüfprotokoll ausblenden" else "Prüfprotokoll anzeigen")
-                    }
-                    if (showLog) Text(log, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+        }
+        if (logEnabled && log.isNotBlank()) {
+            item {
+                TextButton(onClick = { showLog = !showLog }) {
+                    Text(if (showLog) "Prüfprotokoll ausblenden" else "Prüfprotokoll anzeigen")
                 }
+                if (showLog) Text(log, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
         }
     }

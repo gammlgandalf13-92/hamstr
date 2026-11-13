@@ -87,7 +87,9 @@ data class Hit(val product: Product, val offer: Offer, val confidence: Double, v
 
     /** Hinweise zum Treffer in einer Zeile (leer, wenn alles passt). */
     fun hintText(): String = buildList {
-        if (notes.isNotEmpty()) add(notes.joinToString("; "))
+        // „gilt erst ab …“ zeigt die App über die Wochen-Ansicht – nicht doppelt als Warnung
+        val shown = notes.filterNot { it.startsWith("gilt erst ab") }
+        if (shown.isNotEmpty()) add(shown.joinToString("; "))
         if (confidence < 0.6) add("Unsicherer Treffer (${(confidence * 100).toInt()} %)")
     }.joinToString(" · ")
 
@@ -237,6 +239,36 @@ object Matcher {
     fun discountPercent(price: Double?, oldPrice: Double?): Int? {
         if (price == null || oldPrice == null || oldPrice <= price) return null
         return ((oldPrice - price) / oldPrice * 100).toInt().takeIf { it >= 1 }
+    }
+
+    /** Montag der Woche, in der [day] liegt. */
+    fun mondayOf(day: LocalDate): LocalDate = day.minusDays((day.dayOfWeek.value - 1).toLong())
+
+    /**
+     * In welchen Wochen gilt ein Angebot? 0 = diese Woche (ab heute), 1 = nächste Woche, 2 = später.
+     * Ein Angebot von Donnerstag bis Mittwoch steht in beiden Wochen. Abgelaufene: leere Menge.
+     */
+    fun weeksOf(from: String, to: String, today: LocalDate = LocalDate.now()): Set<Int> {
+        val f = runCatching { LocalDate.parse(from) }.getOrNull()
+        val t = runCatching { LocalDate.parse(to) }.getOrNull()
+        if (t != null && t.isBefore(today)) return emptySet()
+        if (f == null && t == null) return setOf(0)
+        val monday = mondayOf(today)
+        val result = mutableSetOf<Int>()
+        for (k in 0..1) {
+            val start = if (k == 0) today else monday.plusDays(7L * k)
+            val end = monday.plusDays(7L * k + 6)
+            if ((f == null || !f.isAfter(end)) && (t == null || !t.isBefore(start))) result += k
+        }
+        if (f != null && f.isAfter(monday.plusDays(13))) result += 2
+        return result
+    }
+
+    /** „16.11. – 22.11.“ für Woche 0/1; Woche 2: „ab 30.11.“ */
+    fun weekRangeText(week: Int, today: LocalDate = LocalDate.now()): String {
+        val monday = mondayOf(today).plusDays(7L * week)
+        val fmt = DateTimeFormatter.ofPattern("dd.MM.")
+        return if (week >= 2) "ab ${monday.format(fmt)}" else "${monday.format(fmt)} – ${monday.plusDays(6).format(fmt)}"
     }
 
     private val DAYS = listOf("Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So.")

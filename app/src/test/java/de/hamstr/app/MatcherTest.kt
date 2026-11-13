@@ -293,4 +293,22 @@ class MatcherTest {
         assertTrue(body, body.contains("Normalpreis ca. 2,49 € – 20 % gespart (Open Prices)"))
         assertTrue(h.hintText(), !h.hintText().contains("Unsicher"))
     }
+
+    // ---------------- Wochen-Ansicht (heute = Mo. 02.11.2026)
+    @Test fun weeks() {
+        assertEquals(setOf(0), Matcher.weeksOf("2026-11-02", "2026-11-07", today))
+        assertEquals(setOf(1), Matcher.weeksOf("2026-11-09", "2026-11-14", today))
+        assertEquals(setOf(0, 1), Matcher.weeksOf("2026-11-05", "2026-11-11", today))
+        assertEquals(setOf(2), Matcher.weeksOf("2026-11-16", "2026-11-21", today))
+        assertEquals(emptySet<Int>(), Matcher.weeksOf("2026-10-26", "2026-10-31", today))
+        assertEquals(setOf(0), Matcher.weeksOf("", "", today))
+        // Sonntag: diese Woche ist nur noch heute, Montag beginnt „nächste Woche“
+        val sunday = LocalDate.of(2026, 11, 8)
+        assertEquals(setOf(1), Matcher.weeksOf("2026-11-09", "2026-11-14", sunday))
+        assertEquals("09.11. – 15.11.", Matcher.weekRangeText(1, today))
+        assertEquals("ab 16.11.", Matcher.weekRangeText(2, today))
+        // „gilt erst ab“ steht nicht als Warnung an der Karte
+        val h = hit(nutella, offer("7", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.49, from = "2026-11-09", to = "2026-11-14"))!!
+        assertTrue(h.hintText(), !h.hintText().contains("gilt erst ab"))
+    }
 }
