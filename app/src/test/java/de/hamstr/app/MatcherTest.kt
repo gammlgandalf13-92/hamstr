@@ -252,4 +252,45 @@ class MatcherTest {
         assertTrue(body.contains("Gültig 02.11.–07.11."))
         assertTrue(body.contains("Zuletzt im Angebot: 22.09."))
     }
+
+    // ---------------- Prospekt-Darstellung
+    @Test fun discountAndValidity() {
+        assertEquals(33, Matcher.discountPercent(2.99, 4.49))
+        assertNull(Matcher.discountPercent(2.99, null))
+        assertNull(Matcher.discountPercent(2.99, 2.99))
+        // 02.11.2026 ist ein Montag
+        assertEquals("bis Sa., 07.11.", Matcher.validityText("2026-11-02", "2026-11-07", today))
+        assertEquals("ab Do., 05.11.", Matcher.validityText("2026-11-05", "2026-11-07", today))
+        assertEquals("nur noch heute", Matcher.validityText("2026-10-28", "2026-11-02", today))
+        assertEquals("bis morgen", Matcher.validityText("2026-10-28", "2026-11-03", today))
+        assertEquals("", Matcher.validityText("", "", today))
+    }
+
+    // ---------------- Vergleichspreise (Open Prices)
+    @Test fun refPricePick() {
+        val prices = listOf(
+            RefPrice(1.79, "2026-10-20", "Lidl", discounted = true, country = "DE"),       // Aktion → nicht als Normalpreis
+            RefPrice(3.10, "2026-09-01", "Carrefour", country = "FR"),                     // Ausland
+            RefPrice(2.49, "2026-06-15", "EDEKA Müller", "Hamburg", country = "DE"),
+            RefPrice(2.29, "2025-01-10", "REWE", country = "DE"),                          // älter als 1 Jahr
+        )
+        val ref = OpenPrices.pick(prices, today)
+        assertEquals(2.49, ref!!.price, 0.001)
+        assertEquals("EDEKA Müller, Hamburg · 06/2026", ref.source())
+        // Nur alte Preise → Rückfall auf den jüngsten bis 2 Jahre
+        assertEquals(2.29, OpenPrices.pick(listOf(prices[3]), today)!!.price, 0.001)
+        // Nur Aktionspreise oder sehr alte → nichts
+        assertNull(OpenPrices.pick(listOf(prices[0], RefPrice(1.0, "2020-01-01")), today))
+        assertEquals(20, OpenPrices.savingPercent(1.99, ref))
+        assertNull(OpenPrices.savingPercent(2.79, ref))
+        assertTrue(OpenPrices.needsRefresh(null))
+        assertTrue(!OpenPrices.needsRefresh(RefEntry(null, 1_000L), now = 2_000L))
+    }
+
+    @Test fun bodyWithRefPrice() {
+        val h = hit(nutella, offer("9", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 1.99, 3.49))!!
+        val body = h.body(ref = RefPrice(2.49, "2026-06-15", "EDEKA"))
+        assertTrue(body, body.contains("Normalpreis ca. 2,49 € – 20 % gespart (Open Prices)"))
+        assertTrue(h.hintText(), !h.hintText().contains("Unsicher"))
+    }
 }

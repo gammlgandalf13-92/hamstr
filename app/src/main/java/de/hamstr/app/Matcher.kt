@@ -85,7 +85,13 @@ data class Hit(val product: Product, val offer: Offer, val confidence: Double, v
     /** Für Benachrichtigungen: "REWE: Ferrero Nutella". */
     fun title(): String = "${offer.store}: ${itemTitle()}"
 
-    fun body(lastSeen: String? = null): String {
+    /** Hinweise zum Treffer in einer Zeile (leer, wenn alles passt). */
+    fun hintText(): String = buildList {
+        if (notes.isNotEmpty()) add(notes.joinToString("; "))
+        if (confidence < 0.6) add("Unsicherer Treffer (${(confidence * 100).toInt()} %)")
+    }.joinToString(" · ")
+
+    fun body(lastSeen: String? = null, ref: RefPrice? = null): String {
         val lines = mutableListOf<String>()
         val price = offer.price?.let { Matcher.euro(it) } ?: "Preis s. Prospekt"
         lines += price + (offer.oldPrice?.let { " (statt ${Matcher.euro(it)})" } ?: "")
@@ -96,6 +102,10 @@ data class Hit(val product: Product, val offer: Offer, val confidence: Double, v
         if (notes.isNotEmpty()) lines += "⚠ " + notes.joinToString("; ")
         if (confidence < 0.6) lines += "Unsicherer Treffer (${(confidence * 100).toInt()} %)"
         if (lastSeen != null) lines += "Zuletzt im Angebot: ${Matcher.shortDate(lastSeen)}"
+        if (ref != null) {
+            val pct = OpenPrices.savingPercent(offer.price, ref)
+            lines += "Normalpreis ca. ${Matcher.euro(ref.price)}" + (pct?.let { " – $it % gespart" } ?: "") + " (Open Prices)"
+        }
         return lines.joinToString("\n")
     }
 }
@@ -222,6 +232,30 @@ object Matcher {
             }
 
     fun euro(v: Double): String = String.format(Locale.GERMANY, "%.2f €", v)
+
+    /** Rabatt in Prozent gegenüber dem Streichpreis; null ohne echten Rabatt. */
+    fun discountPercent(price: Double?, oldPrice: Double?): Int? {
+        if (price == null || oldPrice == null || oldPrice <= price) return null
+        return ((oldPrice - price) / oldPrice * 100).toInt().takeIf { it >= 1 }
+    }
+
+    private val DAYS = listOf("Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So.")
+
+    /** Gültigkeit wie in Prospekt-Apps: „ab Mo., 17.11.“, „nur noch heute“, „bis Sa., 22.11.“. */
+    fun validityText(from: String, to: String, today: LocalDate = LocalDate.now()): String {
+        fun parse(s: String) = runCatching { LocalDate.parse(s) }.getOrNull()
+        fun day(d: LocalDate) = "${DAYS[d.dayOfWeek.value - 1]}, ${d.format(DateTimeFormatter.ofPattern("dd.MM."))}"
+        val f = parse(from)
+        val t = parse(to)
+        return when {
+            f != null && f.isAfter(today) -> "ab ${day(f)}"
+            t == null -> ""
+            t.isBefore(today) -> "abgelaufen"
+            t == today -> "nur noch heute"
+            t == today.plusDays(1) -> "bis morgen"
+            else -> "bis ${day(t)}"
+        }
+    }
 
     fun shortDate(iso: String): String = try {
         LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("dd.MM."))

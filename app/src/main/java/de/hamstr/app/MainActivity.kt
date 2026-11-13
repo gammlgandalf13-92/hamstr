@@ -33,6 +33,21 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -104,12 +119,15 @@ fun HamstrApp() {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = settingsOpen) { settingsOpen = false }
+    // Zurück auf „Produkte“ führt erst zu „Ergebnisse“ – wie in anderen Apps mit Tableiste
+    androidx.activity.compose.BackHandler(enabled = !settingsOpen && tab != 0) { tab = 0 }
     var version by remember { mutableIntStateOf(0) }
 
     val workFlow = remember { WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkFlow(Scheduler.NOW) }
     val work by workFlow.collectAsState(initial = emptyList())
     val running = work.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
     LaunchedEffect(running) { if (!running) version++ }
+    val hitCount = remember(version) { store.hits().size }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
@@ -118,28 +136,35 @@ fun HamstrApp() {
         ) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    val tabs = listOf("🛒" to "Ergebnisse", "📋" to "Produkte")
+    val title = when {
+        settingsOpen -> "Einstellungen"
+        tab == 1 -> "Produkte"
+        else -> "Ergebnisse"
+    }
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (settingsOpen) "Einstellungen" else "🐹 Hamstr", fontWeight = FontWeight.Bold) },
+                title = { Text(title, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     if (settingsOpen) {
-                        androidx.compose.material3.IconButton(onClick = { settingsOpen = false }) {
-                            androidx.compose.material3.Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Zurück",
-                            )
+                        IconButton(onClick = { settingsOpen = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück")
                         }
                     }
                 },
                 actions = {
+                    if (!settingsOpen && tab == 0) {
+                        if (running) {
+                            CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.5.dp)
+                        } else {
+                            IconButton(onClick = { Scheduler.runNow(ctx) }) {
+                                Icon(Icons.Filled.Refresh, contentDescription = "Jetzt prüfen")
+                            }
+                        }
+                    }
                     if (!settingsOpen) {
-                        androidx.compose.material3.IconButton(onClick = { settingsOpen = true }) {
-                            androidx.compose.material3.Icon(
-                                Icons.Filled.Settings,
-                                contentDescription = "Einstellungen",
-                            )
+                        IconButton(onClick = { settingsOpen = true }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Einstellungen")
                         }
                     }
                 },
@@ -147,14 +172,22 @@ fun HamstrApp() {
         },
         bottomBar = {
             if (!settingsOpen) NavigationBar {
-                tabs.forEachIndexed { i, (icon, label) ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
-                        icon = { Text(icon, fontSize = 20.sp) },
-                        label = { Text(label) },
-                    )
-                }
+                NavigationBarItem(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    icon = {
+                        BadgedBox(badge = { if (hitCount > 0) Badge { Text(if (hitCount > 99) "99+" else "$hitCount") } }) {
+                            Icon(if (tab == 0) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Ergebnisse") },
+                )
+                NavigationBarItem(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                    label = { Text("Produkte") },
+                )
             }
         },
     ) { padding ->
@@ -162,7 +195,12 @@ fun HamstrApp() {
             when {
                 settingsOpen -> SettingsScreen(store)
                 tab == 1 -> ProductsScreen(store)
-                else -> HitsScreen(store, version, running) { Scheduler.runNow(ctx) }
+                else -> HitsScreen(
+                    store, version, running,
+                    onCheck = { Scheduler.runNow(ctx) },
+                    onOpenProducts = { tab = 1 },
+                    onOpenSettings = { settingsOpen = true },
+                )
             }
         }
     }
@@ -176,7 +214,7 @@ fun HamstrApp() {
 @Composable
 private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolean, onToggleFavorite: () -> Unit) {
     val ctx = LocalContext.current
-    androidx.compose.material3.Surface(
+    Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
@@ -187,26 +225,36 @@ private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolea
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             } else Modifier),
     ) {
-        Row(Modifier.padding(start = 2.dp, end = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.IconButton(onClick = onToggleFavorite) {
-                Text(
-                    if (favorite) "★" else "☆",
-                    fontSize = 24.sp,
-                    color = if (favorite) Color(0xFFF2A900) else MaterialTheme.colorScheme.onPrimaryContainer,
+        Row(Modifier.padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    if (favorite) Icons.Filled.Star else Icons.Outlined.Star,
+                    contentDescription = if (favorite) "Kein Lieblingsmarkt mehr" else "Als Lieblingsmarkt markieren",
+                    tint = if (favorite) Color(0xFFF2A900) else MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
             Column(Modifier.weight(1f)) {
                 Text(store, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                Text(if (count == 1) "1 Ergebnis" else "$count Ergebnisse", style = MaterialTheme.typography.bodySmall)
+                Text(if (count == 1) "1 Angebot" else "$count Angebote", style = MaterialTheme.typography.bodySmall)
             }
             if (url.isNotBlank()) {
-                Text("Alle Angebote ›", style = MaterialTheme.typography.labelLarge)
+                Text("Alle", style = MaterialTheme.typography.labelLarge)
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Alle Angebote des Marktes")
             }
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit) {
+fun HitsScreen(
+    store: Store,
+    version: Int,
+    running: Boolean,
+    onCheck: () -> Unit,
+    onOpenProducts: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     val ctx = LocalContext.current
     val hits = remember(version) { store.hits() }
     val log = remember(version) { store.log }
@@ -215,71 +263,102 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
     var favorites by remember { mutableStateOf(store.favoriteChains) }
     val lastRun = remember(version) { store.lastRun }
     var showLog by rememberSaveable { mutableStateOf(false) }
+    // Vergleichspreise: Treffer → Produkt → Barcode → Open-Prices-Preis
+    val refByProduct = remember(version) {
+        val refs = store.refPrices()
+        store.products().associate { p -> p.id to refs[p.ean]?.ref }
+    }
 
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = onCheck, enabled = !running) { Text(if (running) "Prüfe…" else "Jetzt prüfen") }
-                if (running) {
-                    Spacer(Modifier.size(12.dp))
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                if (lastRun == 0L) "Noch keine Prüfung gelaufen."
-                else "Zuletzt geprüft: " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(lastRun)),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-        // Verständliche Meldung statt Technik
-        val notice = when (status) {
-            "no_plz" -> "Bitte trag in den Einstellungen deine PLZ ein, damit Hamstr Angebote in deiner Region findet."
-            "no_products" -> "Leg unter „Produkte“ fest, was Hamstr für dich beobachten soll."
-            "failed" -> "Angebote konnten gerade nicht abgerufen werden. Bitte später noch einmal prüfen."
-            else -> if (hits.isEmpty() && lastRun != 0L) "Keine aktuellen Angebote zu deinen Produkten gefunden." else null
-        }
-        notice?.let { item { Text(it, style = MaterialTheme.typography.bodyLarge) } }
-        if (status == "partial" && hits.isNotEmpty()) {
+    PullToRefreshBox(isRefreshing = running, onRefresh = onCheck, modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             item {
-                Text("Einige Produkte konnten nicht geprüft werden – die Liste ist evtl. unvollständig.",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(
+                    when {
+                        running -> "Suche nach Angeboten…"
+                        lastRun == 0L -> "Noch keine Prüfung gelaufen. Zum Prüfen nach unten ziehen."
+                        else -> "Zuletzt geprüft: " + SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(Date(lastRun)) +
+                            " · zum Aktualisieren nach unten ziehen"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-        }
-        // Nach Markt gruppiert, Märkte alphabetisch
-        // Nach Markt gruppiert: Lieblingsmärkte zuerst, sonst alphabetisch
-        val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toList().sortedWith(
-            compareBy<Pair<String, List<SavedHit>>>({ Geo.chainKey(it.first) !in favorites }, { it.first.lowercase() })
-        )
-        byStore.forEach { (storeName, storeHits) ->
-            item(key = "store|$storeName") {
-                val chain = Geo.chainKey(storeName)
-                StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
-                    favorites = store.toggleFavorite(chain)
+            // Verständliche Meldung statt Technik
+            when {
+                status == "no_plz" -> item {
+                    EmptyState(Icons.Filled.LocationOn, "Wo kaufst du ein?",
+                        "Trag deine PLZ ein, damit Hamstr Angebote in deiner Region findet.",
+                        "Zu den Einstellungen", onOpenSettings)
+                }
+                status == "no_products" -> item {
+                    EmptyState(Icons.AutoMirrored.Filled.List, "Noch keine Produkte",
+                        "Leg fest, was Hamstr für dich beobachten soll – per Suche oder Barcode.",
+                        "Produkt hinzufügen", onOpenProducts)
+                }
+                status == "failed" && hits.isEmpty() -> item {
+                    EmptyState(Icons.Filled.Refresh, "Gerade kein Abruf möglich",
+                        "Die Angebote konnten nicht geladen werden. Bitte später noch einmal prüfen.",
+                        if (running) null else "Erneut versuchen", onCheck)
+                }
+                hits.isEmpty() && lastRun == 0L -> item {
+                    EmptyState(Icons.Filled.Search, "Noch nichts geprüft",
+                        "Hamstr prüft automatisch zu deinen Prüfzeiten. Du kannst auch sofort nachsehen.",
+                        if (running) null else "Jetzt prüfen", onCheck)
+                }
+                hits.isEmpty() -> item {
+                    EmptyState(Icons.Outlined.ShoppingCart, "Keine Angebote",
+                        "Zu deinen Produkten gibt es gerade keine Angebote. Hamstr sagt dir Bescheid, sobald sich das ändert.")
                 }
             }
-            items(storeHits) { h ->
-                Card(Modifier.fillMaxWidth().clickable {
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
-                }) {
-                    Row(Modifier.padding(12.dp)) {
-                        ProductImage(h.image, 72.dp)
-                        Spacer(Modifier.size(12.dp))
-                        Column {
-                            Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(4.dp))
-                            Text(h.body, style = MaterialTheme.typography.bodyMedium)
+            if (status == "partial" && hits.isNotEmpty()) {
+                item { InfoBanner("Einige Produkte konnten nicht geprüft werden – die Liste ist evtl. unvollständig.") }
+            }
+            // Nach Markt gruppiert: Lieblingsmärkte zuerst, sonst alphabetisch
+            val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toList().sortedWith(
+                compareBy<Pair<String, List<SavedHit>>>({ Geo.chainKey(it.first) !in favorites }, { it.first.lowercase() })
+            )
+            byStore.forEach { (storeName, storeHits) ->
+                item(key = "store|$storeName") {
+                    val chain = Geo.chainKey(storeName)
+                    StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
+                        favorites = store.toggleFavorite(chain)
+                    }
+                }
+                items(storeHits) { h ->
+                    val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
+                    if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
+                        OfferCard(
+                            image = h.image, title = h.title, description = h.description,
+                            price = h.price, oldPrice = h.oldPrice, validFrom = h.validFrom, validTo = h.validTo,
+                            hint = h.notes, ref = refByProduct[h.productId], onClick = { open() },
+                        )
+                    } else {
+                        // Ältere gespeicherte Treffer ohne Einzelfelder
+                        Card(Modifier.fillMaxWidth().clickable { open() }) {
+                            Row(Modifier.padding(12.dp)) {
+                                ProductImage(h.image, 72.dp)
+                                Spacer(Modifier.size(12.dp))
+                                Column {
+                                    Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(h.body, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
-        if (logEnabled && log.isNotBlank()) {
-            item {
-                TextButton(onClick = { showLog = !showLog }) {
-                    Text(if (showLog) "Prüfprotokoll ausblenden" else "Prüfprotokoll anzeigen")
+            if (logEnabled && log.isNotBlank()) {
+                item {
+                    TextButton(onClick = { showLog = !showLog }) {
+                        Text(if (showLog) "Prüfprotokoll ausblenden" else "Prüfprotokoll anzeigen")
+                    }
+                    if (showLog) Text(log, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
                 }
-                if (showLog) Text(log, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
             }
         }
     }

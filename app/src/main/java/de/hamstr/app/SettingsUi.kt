@@ -21,7 +21,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,17 +83,16 @@ fun SettingsScreen(store: Store) {
     var chainsVersion by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
-    var saved by remember { mutableStateOf(false) }
     var resetDone by remember { mutableStateOf(false) }
     var showLog by remember { mutableStateOf(store.showLog) }
 
     val plzOk = Regex("\\d{5}").matches(plz.trim())
 
-    fun saveAll() {
-        store.plz = plz.trim()
-        store.radiusKm = radius.roundToInt()
-        center?.let { store.center = Triple(it.first, it.second, plz.trim()) }
-        saved = true
+    /** Wie in den Android-Einstellungen: Änderungen gelten sofort, ohne Speichern-Knopf. */
+    fun changePlz(value: String) {
+        plz = value.filter(Char::isDigit).take(5)
+        nearby = null
+        if (Regex("\\d{5}").matches(plz)) store.plz = plz
     }
 
     fun locate() {
@@ -104,8 +109,7 @@ fun SettingsScreen(store: Store) {
                 val code = withContext(Dispatchers.IO) { Geo.postcodeFor(ctx, loc.latitude, loc.longitude) }
                 store.center = Triple(loc.latitude, loc.longitude, code.orEmpty())
                 if (code != null) {
-                    plz = code
-                    saved = false
+                    changePlz(code)
                     message = "PLZ $code übernommen."
                 } else {
                     message = "Standort gefunden, aber keine PLZ ermittelbar – bitte von Hand eintragen."
@@ -151,31 +155,37 @@ fun SettingsScreen(store: Store) {
     }
 
     Column(
-        Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // ---------------- Wo
-        Text("Wo kaufst du ein?", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = plz,
-                onValueChange = { plz = it.filter(Char::isDigit).take(5); saved = false; nearby = null },
-                label = { Text("Postleitzahl") },
-                isError = plz.isNotEmpty() && !plzOk,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.size(8.dp))
-            OutlinedButton(onClick = { locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
-                enabled = busy == null) { Text("📍 Standort") }
-        }
+        // ---------------- Standort
+        SettingsHeader("Standort")
+        OutlinedTextField(
+            value = plz,
+            onValueChange = { changePlz(it) },
+            label = { Text("Postleitzahl") },
+            isError = plz.isNotEmpty() && !plzOk,
+            supportingText = { if (plz.isNotEmpty() && !plzOk) Text("Bitte 5 Ziffern eingeben") },
+            singleLine = true,
+            trailingIcon = {
+                if (busy == "Standort wird ermittelt…") {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                } else {
+                    IconButton(
+                        onClick = { locationPermission.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                        enabled = busy == null,
+                    ) { Icon(Icons.Filled.LocationOn, contentDescription = "Meinen Standort verwenden") }
+                }
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         Text("Umkreis: ${radius.roundToInt()} km", style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = radius,
-            onValueChange = { radius = it; saved = false },
-            onValueChangeFinished = { nearby = null },
+            onValueChange = { radius = it },
+            onValueChangeFinished = { nearby = null; store.radiusKm = radius.roundToInt() },
             valueRange = 1f..25f,
             steps = 23,
         )
@@ -185,7 +195,9 @@ fun SettingsScreen(store: Store) {
             StoreMap(lat, lon, radius.roundToInt(), nearby.orEmpty(), label)
         }
 
-        Button(onClick = { findStores() }, enabled = plzOk && busy == null) { Text("Supermärkte im Umkreis finden") }
+        OutlinedButton(onClick = { findStores() }, enabled = plzOk && busy == null, modifier = Modifier.fillMaxWidth()) {
+            Text("Supermärkte im Umkreis finden")
+        }
         busy?.let { b ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -195,50 +207,61 @@ fun SettingsScreen(store: Store) {
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
 
-        Button(enabled = plzOk, onClick = { saveAll() }) { Text("PLZ und Umkreis speichern") }
-        if (saved) Text("Gespeichert.", style = MaterialTheme.typography.bodySmall)
-
+        // ---------------- Märkte
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Meine Märkte")
         MarketList(store, chainsVersion)
 
         // ---------------- Wann
-        HorizontalDivider()
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Prüfzeiten")
         ScheduleSection(store)
 
+        // ---------------- Benachrichtigungen
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Benachrichtigungen")
+        SettingsRow(
+            "Benachrichtigungen verwalten",
+            "Töne und Kanäle (Angebote, App-Updates) in den Android-Einstellungen",
+            onClick = { openNotificationSettings(ctx) },
+        ) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+        SettingsRow(
+            "Gemeldete Angebote vergessen",
+            if (resetDone) "Zurückgesetzt – bei der nächsten Prüfung wird alles neu gemeldet."
+            else "Jedes Angebot wird nur einmal gemeldet. Zum Testen zurücksetzen.",
+            onClick = { store.resetSeen(); resetDone = true },
+        )
+
         // ---------------- Updates
-        HorizontalDivider()
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Updates")
         UpdateSection(store)
 
-        // ---------------- Sonstiges
-        HorizontalDivider()
-        Text("Zuverlässigkeit", fontWeight = FontWeight.Bold)
+        // ---------------- Allgemein
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Allgemein")
+        SettingsRow(
+            "Akku-Einstellungen",
+            "Manche Handys (z. B. Samsung, Xiaomi) bremsen Apps im Hintergrund. Stell Hamstr beim Akku auf „Nicht eingeschränkt“.",
+            onClick = { openAppSettings(ctx) },
+        ) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) }
+        SettingsRow(
+            "Prüfprotokoll anzeigen",
+            "Technische Details zur letzten Prüfung unter „Ergebnisse“ – nur für die Fehlersuche.",
+            onClick = { showLog = !showLog; store.showLog = showLog },
+        ) { Switch(checked = showLog, onCheckedChange = { showLog = it; store.showLog = it }) }
+
+        // ---------------- Über
+        HorizontalDivider(Modifier.padding(top = 8.dp))
+        SettingsHeader("Über Hamstr")
         Text(
-            "Manche Handys (z. B. Samsung, Xiaomi) bremsen Apps im Hintergrund. " +
-                "Stell Hamstr dort beim Akku auf „Nicht eingeschränkt“.",
+            "Version ${appVersion(ctx)}\n" +
+                "Angebote: Marktguru · Produktdaten: Open Food Facts · Vergleichspreise: Open Prices (ODbL) · " +
+                "Karte & Märkte: © OpenStreetMap-Mitwirkende",
             style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedButton(onClick = { openAppSettings(ctx) }) { Text("App-Einstellungen öffnen") }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Prüfprotokoll anzeigen", fontWeight = FontWeight.Bold)
-                Text("Technische Details zur letzten Prüfung auf der Seite „Ergebnisse“ – nur für die Fehlersuche.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.size(8.dp))
-            androidx.compose.material3.Switch(checked = showLog, onCheckedChange = { showLog = it; store.showLog = it })
-        }
-
-        Text("Meldungen", fontWeight = FontWeight.Bold)
-        Text("Jedes Angebot wird nur einmal gemeldet. Zum Testen kannst du das zurücksetzen.",
-            style = MaterialTheme.typography.bodySmall)
-        OutlinedButton(onClick = { store.resetSeen(); resetDone = true }) { Text("Gemeldete Angebote vergessen") }
-        if (resetDone) Text("Zurückgesetzt.")
-
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Angebote: Marktguru · Karte & Märkte: © OpenStreetMap-Mitwirkende · Version ${appVersion(ctx)}",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -299,24 +322,23 @@ private fun UpdateSection(store: Store) {
         }
     }
 
-    Text("Updates", fontWeight = FontWeight.Bold)
-    Text("Installiert: Version 1.0.$current", style = MaterialTheme.typography.bodySmall)
-
     val info = latest
-    when {
-        info != null && info.version > current -> {
-            Text("Neu: ${info.name}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium)
-            Button(onClick = { installLatest(info) }, enabled = !busy) { Text("Herunterladen und installieren") }
-        }
-        checked && info != null -> Text("Du hast die neueste Version.", style = MaterialTheme.typography.bodySmall)
+    val newer = info != null && info.version > current
+    SettingsRow(
+        "Nach Updates suchen",
+        when {
+            checking -> "Suche…"
+            newer -> "Neu: ${info!!.name} · installiert: 1.0.$current"
+            checked && info != null -> "Du hast die neueste Version (1.0.$current)."
+            else -> "Installiert: Version 1.0.$current"
+        },
+        onClick = if (busy) null else ({ check() }),
+    ) {
+        if (checking) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(onClick = { check() }, enabled = !busy) {
-            Text(if (checking) "Suche…" else "Nach Updates suchen")
-        }
-        if (checking) {
-            Spacer(Modifier.size(12.dp))
-            CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+    if (newer) {
+        Button(onClick = { installLatest(info!!) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Text("Herunterladen und installieren")
         }
     }
     if (busy && !checking) {
@@ -385,6 +407,11 @@ private fun StoreMap(lat: Double, lon: Double, radiusKm: Int, shops: List<Nearby
             m.invalidate()
         },
     )
+}
+
+private fun openNotificationSettings(ctx: Context) {
+    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+    runCatching { ctx.startActivity(intent) }.onFailure { openAppSettings(ctx) }
 }
 
 private fun openAppSettings(ctx: Context) {

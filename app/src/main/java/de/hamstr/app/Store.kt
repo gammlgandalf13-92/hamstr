@@ -14,6 +14,12 @@ data class SavedHit(
     val image: String = "",
     val store: String = "",          // z. B. "ALDI SÜD"
     val storeSlug: String = "",      // z. B. "aldi-sued" – für die Marktseite bei Marktguru
+    val productId: String = "",
+    val price: Double? = null,
+    val oldPrice: Double? = null,
+    val validFrom: String = "",
+    val description: String = "",
+    val notes: String = "",          // Hinweise wie „Größe abweichend“, „Unsicherer Treffer“
 ) {
     /** Alle aktuellen Angebote dieses Marktes bei Marktguru. */
     val storeUrl: String
@@ -153,8 +159,16 @@ class Store(context: Context) {
                     store = title.substringBefore(": ")
                     title = title.substringAfter(": ")
                 }
-                SavedHit(title, it.optString("body"), it.optString("url"),
-                    it.optString("validTo"), it.optString("image"), store, it.optString("storeSlug"))
+                SavedHit(
+                    title, it.optString("body"), it.optString("url"),
+                    it.optString("validTo"), it.optString("image"), store, it.optString("storeSlug"),
+                    productId = it.optString("productId"),
+                    price = if (it.has("price")) it.optDouble("price") else null,
+                    oldPrice = if (it.has("oldPrice")) it.optDouble("oldPrice") else null,
+                    validFrom = it.optString("validFrom"),
+                    description = it.optString("description"),
+                    notes = it.optString("notes"),
+                )
             }
         }
     }
@@ -165,9 +179,38 @@ class Store(context: Context) {
             arr.put(JSONObject().put("title", it.itemTitle()).put("body", it.body())
                 .put("store", it.offer.store).put("storeSlug", it.offer.storeSlug)
                 .put("url", it.offer.url).put("validTo", it.offer.validTo)
-                .put("image", it.offer.imageUrl.ifBlank { it.product.image }))
+                .put("image", it.offer.imageUrl.ifBlank { it.product.image })
+                .put("productId", it.product.id).put("validFrom", it.offer.validFrom)
+                .put("description", it.offer.description.take(140)).put("notes", it.hintText())
+                .apply {
+                    it.offer.price?.let { v -> put("price", v) }
+                    it.offer.oldPrice?.let { v -> put("oldPrice", v) }
+                })
         }
         prefs.edit().putString("hits", arr.toString()).apply()
+    }
+
+    // ---------------- Vergleichspreise (Open Prices) ----------------
+    fun refPrices(): Map<String, RefEntry> {
+        val raw = prefs.getString("refPrices", null) ?: return emptyMap()
+        val o = JSONObject(raw)
+        return o.keys().asSequence().associateWith { k ->
+            val e = o.getJSONObject(k)
+            val ref = if (e.has("p")) RefPrice(
+                price = e.optDouble("p"), date = e.optString("d"), shop = e.optString("s"),
+                city = e.optString("c"), country = e.optString("cc"),
+            ) else null
+            RefEntry(ref, e.optLong("t"))
+        }
+    }
+
+    @Synchronized
+    fun saveRefPrice(ean: String, ref: RefPrice?, now: Long = System.currentTimeMillis()) {
+        val o = JSONObject(prefs.getString("refPrices", null) ?: "{}")
+        val e = JSONObject().put("t", now)
+        if (ref != null) e.put("p", ref.price).put("d", ref.date).put("s", ref.shop).put("c", ref.city).put("cc", ref.country)
+        o.put(ean, e)
+        prefs.edit().putString("refPrices", o.toString()).apply()
     }
 
     var log: String

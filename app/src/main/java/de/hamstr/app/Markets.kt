@@ -9,7 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -132,7 +138,6 @@ fun MarketList(store: Store, refreshKey: Int) {
         hint = "„${Markets.label(key, info)}“ hinzugefügt und eingeschaltet."
     }
 
-    Text("Meine Märkte", fontWeight = FontWeight.Bold)
     Text(
         (if (searched) "Ketten im Umkreis stehen oben. Nur eingeschaltete Märkte werden gemeldet."
         else "Nur eingeschaltete Märkte werden gemeldet. Tipp: „Supermärkte im Umkreis finden“ zeigt, was in deiner Nähe ist.") +
@@ -163,13 +168,15 @@ fun MarketList(store: Store, refreshKey: Int) {
                         sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                     if (key !in Markets.DEFAULTS && c?.distanceKm == null) {
-                        TextButton(onClick = { remove(key) }) { Text("✕") }
+                        IconButton(onClick = { remove(key) }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Entfernen")
+                        }
                     }
-                    TextButton(onClick = { favorites = store.toggleFavorite(key) }) {
-                        Text(
-                            if (key in favorites) "★" else "☆",
-                            fontSize = 20.sp,
-                            color = if (key in favorites) androidx.compose.ui.graphics.Color(0xFFF2A900)
+                    IconButton(onClick = { favorites = store.toggleFavorite(key) }) {
+                        Icon(
+                            if (key in favorites) Icons.Filled.Star else Icons.Outlined.Star,
+                            contentDescription = if (key in favorites) "Kein Lieblingsmarkt mehr" else "Als Lieblingsmarkt markieren",
+                            tint = if (key in favorites) androidx.compose.ui.graphics.Color(0xFFF2A900)
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -189,7 +196,7 @@ fun MarketList(store: Store, refreshKey: Int) {
             keyboardActions = KeyboardActions(onDone = { add() }),
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = { add() }, enabled = newChain.isNotBlank()) { Text("+ Hinzufügen") }
+        TextButton(onClick = { add() }, enabled = newChain.isNotBlank()) { Text("Hinzufügen") }
     }
     hint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
     Spacer(Modifier.size(2.dp))

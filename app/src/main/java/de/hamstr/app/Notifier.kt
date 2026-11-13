@@ -45,8 +45,8 @@ object Notifier {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 
-    fun hit(context: Context, hit: Hit, lastSeen: String?) {
-        val body = hit.body(lastSeen)
+    fun hit(context: Context, hit: Hit, lastSeen: String?, ref: RefPrice? = null) {
+        val body = hit.body(lastSeen, ref)
         val open = Intent(Intent.ACTION_VIEW, Uri.parse(hit.offer.url))
         post(context, hit.dedupeKey.hashCode(), hit.title(), body, open)
     }

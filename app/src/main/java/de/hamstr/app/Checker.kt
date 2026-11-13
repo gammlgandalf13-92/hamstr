@@ -80,6 +80,11 @@ object Checker {
         st.saveHits(best)
         upgradeImages(context, st, products, best, log)
 
+        // Vergleichspreise (Open Prices) für Produkte mit Barcode – höchstens einmal pro Woche
+        runCatching { OpenPrices.refresh(st, products.map { it.ean }) }
+        val refs = st.refPrices()
+        val eanOf = products.associate { it.id to it.ean }
+
         val seen = st.seen()
         val history = st.history()
         val fresh = best.filter { it.dedupeKey !in seen }
@@ -89,7 +94,7 @@ object Checker {
             val histKey = "${h.itemKey}|${h.offer.storeSlug}"
             val prior = history[histKey].orEmpty().filter { it < h.offer.validFrom }.maxOrNull()
             if (!canNotify) return@forEachIndexed // nicht merken → nach Freigabe erneut melden
-            if (i < MAX_NOTIFICATIONS) Notifier.hit(context, h, prior)
+            if (i < MAX_NOTIFICATIONS) Notifier.hit(context, h, prior, eanOf[h.product.id]?.let { refs[it]?.ref })
             seen[h.dedupeKey] = h.offer.validTo
             history[histKey] = (history[histKey].orEmpty() + h.offer.validFrom).distinct().sorted().takeLast(20)
         }

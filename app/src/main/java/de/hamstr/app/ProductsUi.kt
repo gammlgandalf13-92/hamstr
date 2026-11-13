@@ -23,7 +23,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -101,8 +122,18 @@ fun ProductsScreen(store: Store) {
     var confirmDelete by remember { mutableStateOf<Product?>(null) }
     val snackbar = remember { SnackbarHostState() }
     var undoJob by remember { mutableStateOf<Job?>(null) }
+    var refs by remember { mutableStateOf(store.refPrices()) }
 
     fun persist() = store.saveProducts(products.toList())
+
+    /** Vergleichspreise im Hintergrund nachladen (nur veraltete, höchstens einmal pro Woche). */
+    fun loadRefs(eans: List<String>, force: Boolean = false) {
+        scope.launch {
+            val changed = withContext(Dispatchers.IO) { runCatching { OpenPrices.refresh(store, eans, force) }.getOrDefault(false) }
+            if (changed) refs = store.refPrices()
+        }
+    }
+    LaunchedEffect(Unit) { loadRefs(products.map { it.ean }) }
 
     /** Entfernen mit 5 Sekunden Rückgängig. Das Bild wird erst danach gelöscht. */
     fun delete(p: Product) {
@@ -134,6 +165,7 @@ fun ProductsScreen(store: Store) {
         val i = products.indexOfFirst { it.id == p.id }
         if (i >= 0) products[i] = p else products.add(p)
         persist()
+        if (p.ean.isNotBlank()) loadRefs(listOf(p.ean))
         Images.cleanup(ctx, p.id, keep = p.image)
         // Bild aus dem Angebot aufs Handy kopieren, damit es nicht mit dem Angebot verschwindet
         if (p.image.startsWith("http")) {
@@ -182,7 +214,13 @@ fun ProductsScreen(store: Store) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                if (products.isEmpty()) item { Text("Noch keine Produkte. Tippe auf +, um eins zu suchen.") }
+                if (products.isEmpty()) item {
+                    EmptyState(
+                        Icons.AutoMirrored.Filled.List, "Noch keine Produkte",
+                        "Such ein Produkt per Name oder Barcode – Hamstr meldet sich, sobald es im Angebot ist.",
+                        "Produkt hinzufügen",
+                    ) { searching = true }
+                }
                 items(products, key = { it.id }) { p ->
                     Card(Modifier.fillMaxWidth().clickable { isNew = false; tip = null; editing = p }) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -200,6 +238,7 @@ fun ProductsScreen(store: Store) {
                                 if (details.isNotEmpty()) {
                                     Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                                 }
+                                refs[p.ean]?.ref?.let { RefPriceLine(it) }
                             }
                         }
                     }
@@ -208,7 +247,7 @@ fun ProductsScreen(store: Store) {
             FloatingActionButton(
                 onClick = { searching = true },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            ) { Text("+", fontSize = 26.sp) }
+            ) { Icon(Icons.Filled.Add, contentDescription = "Produkt hinzufügen") }
             SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(bottom = 88.dp))
         }
     }
@@ -219,6 +258,7 @@ fun ProductsScreen(store: Store) {
             initial = current,
             isNew = isNew,
             tip = tip,
+            ref = refs[current.ean]?.ref,
             onDismiss = { editing = null },
             onSave = { save(it); editing = null },
             onDelete = if (isNew) null else {
@@ -405,11 +445,31 @@ fun SearchScreen(
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onClose) { Text("← Zurück") }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onManual) { Text("Ohne Suche anlegen") }
-            }
+            // Suchfeld wie bei Google/Play Store: links zurück, rechts suchen bzw. leeren
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Name oder Barcode, z. B. Nutella") },
+                singleLine = true,
+                shape = RoundedCornerShape(28.dp),
+                leadingIcon = {
+                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
+                },
+                trailingIcon = {
+                    when {
+                        loading -> CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        query.isNotBlank() -> Row {
+                            IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Clear, contentDescription = "Leeren") }
+                            IconButton(onClick = { search() }) { Icon(Icons.Filled.Search, contentDescription = "Suchen") }
+                        }
+                        else -> Icon(Icons.Filled.Search, contentDescription = null)
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { search() }),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.size(8.dp))
             OutlinedButton(
                 onClick = {
                     scanError = null
@@ -419,21 +479,13 @@ fun SearchScreen(
                 },
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("📷  Barcode scannen") }
+            ) {
+                Icon(painterResource(R.drawable.ic_barcode), contentDescription = null, Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Text("Barcode scannen")
+            }
             scanError?.let { Hint(it) }
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = { Text("Name oder Barcode, z. B. Nutella") },
-                singleLine = true,
-                trailingIcon = {
-                    if (loading) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                    else TextButton(onClick = { search() }, enabled = query.isNotBlank()) { Text("🔍", fontSize = 18.sp) }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { search() }),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            TextButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text("Ohne Suche von Hand anlegen") }
         }
 
         // ---------------- Aktuell im Angebot
@@ -457,13 +509,10 @@ fun SearchScreen(
                 }
             }
             items(shownOffers.orEmpty(), key = { "o|" + it.id + "|" + it.storeSlug }) { o ->
-                ResultCard(
-                    image = o.imageUrl,
-                    title = o.displayName,
-                    subtitle = o.description,
-                    footer = "${o.store}  ${o.price?.let { Matcher.euro(it) }.orEmpty()}  " +
-                        "${Matcher.shortDate(o.validFrom)}–${Matcher.shortDate(o.validTo)}",
-                    onClick = { onPick(o) },
+                OfferCard(
+                    image = o.imageUrl, title = o.displayName, description = o.description,
+                    price = o.price, oldPrice = o.oldPrice, validFrom = o.validFrom, validTo = o.validTo,
+                    store = o.store, onClick = { onPick(o) },
                 )
             }
         }
@@ -520,11 +569,13 @@ private fun ResultCard(image: String, title: String, subtitle: String, footer: S
 }
 
 // ------------------------------------------------------------------ Bearbeiten
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductDialog(
     initial: Product,
     isNew: Boolean,
     tip: String? = null,
+    ref: RefPrice? = null,
     onDismiss: () -> Unit,
     onSave: (Product) -> Unit,
     onDelete: (() -> Unit)?,
@@ -589,11 +640,49 @@ fun ProductDialog(
     }
     val valid = names.isNotBlank() || brand.isNotBlank()
 
-    AlertDialog(
+    // Vollbild-Formular wie in Kontakte/Kalender: ✕ links, „Speichern“ rechts oben
+    fun doSave() {
+        onSave(
+                    initial.copy(
+                        names = Store.splitList(names, "|"),
+                        brand = brand.trim(),
+                        size = size.trim(),
+                        exact = exact,
+                        queries = Store.splitList(queries, "|"),
+                        exclude = Store.splitList(exclude, ","),
+                        maxPrice = maxPrice.replace(",", ".").trim().toDoubleOrNull(),
+                        stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) },
+                        image = image,
+                        imageSource = if (image.isBlank()) "" else imageSource,
+                    )
+                )
+    }
+
+    Dialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isNew) "Neues Produkt" else "Produkt bearbeiten") },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            topBar = {
+                TopAppBar(
+                    title = { Text(if (isNew) "Neues Produkt" else "Produkt bearbeiten") },
+                    navigationIcon = {
+                        IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Abbrechen") }
+                    },
+                    actions = {
+                        TextButton(enabled = valid, onClick = { doSave() }) {
+                            Text("Speichern", fontWeight = FontWeight.Bold)
+                        }
+                    },
+                )
+            },
+        ) { inner ->
+            Column(
+                Modifier.padding(inner).fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ProductImage(image, 64.dp)
                     Spacer(Modifier.size(8.dp))
@@ -618,6 +707,7 @@ fun ProductDialog(
                     Text("EAN ${initial.ean}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                ref?.let { RefPriceLine(it) }
                 Field("Name", names, { names = it }, "z. B. Nutella")
                 tip?.let {
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
@@ -637,7 +727,9 @@ fun ProductDialog(
                 }
 
                 TextButton(onClick = { advanced = !advanced }) {
-                    Text(if (advanced) "▲ Weniger Optionen" else "▼ Weitere Optionen")
+                    Icon(if (advanced) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown, contentDescription = null)
+                    Spacer(Modifier.size(4.dp))
+                    Text(if (advanced) "Weniger Optionen" else "Weitere Optionen")
                 }
                 if (advanced) {
                     Field("Max. Preis (€)", maxPrice, { maxPrice = it }, "z. B. 2,49", KeyboardType.Decimal)
@@ -649,33 +741,18 @@ fun ProductDialog(
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+                if (onDelete != null) {
+                    Spacer(Modifier.size(16.dp))
+                    OutlinedButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.size(8.dp))
+                        Text("Produkt entfernen", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Spacer(Modifier.size(24.dp))
             }
-        },
-        confirmButton = {
-            TextButton(enabled = valid, onClick = {
-                onSave(
-                    initial.copy(
-                        names = Store.splitList(names, "|"),
-                        brand = brand.trim(),
-                        size = size.trim(),
-                        exact = exact,
-                        queries = Store.splitList(queries, "|"),
-                        exclude = Store.splitList(exclude, ","),
-                        maxPrice = maxPrice.replace(",", ".").trim().toDoubleOrNull(),
-                        stores = Store.splitList(stores, ",").map { it.lowercase(Locale.GERMAN) },
-                        image = image,
-                        imageSource = if (image.isBlank()) "" else imageSource,
-                    )
-                )
-            }) { Text("Speichern") }
-        },
-        dismissButton = {
-            Row {
-                if (onDelete != null) TextButton(onClick = onDelete) { Text("Löschen", color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text("Abbrechen") }
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

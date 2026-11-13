@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barcode-Symbol (Rahmenecken + Striche), wird in Compose eingefärbt -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M3,3h5v2H5v3H3V3zM16,3h5v5h-2V5h-3V3zM3,16h2v3h3v2H3v-5zM19,16h2v5h-5v-2h3v-3zM7,8h1.5v8H7v-8zM9.5,8h1v8h-1v-8zM11.5,8h2v8h-2v-8zM14.5,8h1v8h-1v-8zM16.5,8h0.8v8h-0.8v-8z" />
+</vector>

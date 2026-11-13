@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -126,7 +129,6 @@ fun ScheduleSection(store: Store) {
         next = Schedule.nextRun(newSlots, LocalDateTime.now())
     }
 
-    Text("Wann prüfen?", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
     Text(
         "Lege fest, an welchen Tagen und um wie viel Uhr Hamstr nach Angeboten sucht. " +
             "Android kann den Zeitpunkt um einige Minuten verschieben.",
@@ -143,7 +145,12 @@ fun ScheduleSection(store: Store) {
                     Spacer(Modifier.weight(1f))
                     Text(Schedule.describeDays(slot.days), style = MaterialTheme.typography.bodySmall)
                     if (slots.size > 1) {
-                        TextButton(onClick = { save(slots.filterIndexed { i, _ -> i != index }) }) { Text("✕") }
+                        androidx.compose.material3.IconButton(onClick = { save(slots.filterIndexed { i, _ -> i != index }) }) {
+                            androidx.compose.material3.Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = "Prüfzeit entfernen",
+                            )
+                        }
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -172,7 +179,11 @@ fun ScheduleSection(store: Store) {
     OutlinedButton(onClick = {
         save(slots + CheckSlot(Schedule.ALL_DAYS, 18, 0))
         editingTime = slots.size - 1
-    }) { Text("+ Weitere Prüfzeit") }
+    }) {
+        androidx.compose.material3.Icon(Icons.Filled.Add, contentDescription = null)
+        Spacer(Modifier.size(6.dp))
+        Text("Weitere Prüfzeit")
+    }
 
     Text(
         Schedule.describeNext(next),
