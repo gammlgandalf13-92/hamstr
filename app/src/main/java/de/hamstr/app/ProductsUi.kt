@@ -39,6 +39,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.TopAppBar
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.LaunchedEffect
@@ -110,6 +113,7 @@ fun ProductImage(image: String, size: Dp) {
 }
 
 // ------------------------------------------------------------------ Produkte
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductsScreen(store: Store) {
     val ctx = LocalContext.current
@@ -221,7 +225,33 @@ fun ProductsScreen(store: Store) {
                         "Produkt hinzufügen",
                     ) { searching = true }
                 }
+                if (products.isNotEmpty()) item {
+                    Text("Antippen zum Bearbeiten · nach links wischen zum Entfernen",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 items(products, key = { it.id }) { p ->
+                    // Nach links wischen → dieselbe Rückfrage wie beim Löschen-Knopf; die Zeile springt zurück
+                    val swipe = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.EndToStart) confirmDelete = p
+                            false
+                        },
+                    )
+                    SwipeToDismissBox(
+                        state = swipe,
+                        enableDismissFromStartToEnd = false,
+                        backgroundContent = {
+                            Box(
+                                Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.errorContainer)
+                                    .padding(horizontal = 20.dp),
+                                contentAlignment = Alignment.CenterEnd,
+                            ) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Entfernen",
+                                    tint = MaterialTheme.colorScheme.onErrorContainer)
+                            }
+                        },
+                    ) {
                     Card(Modifier.fillMaxWidth().clickable { isNew = false; tip = null; editing = p }) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                             ProductImage(p.image, 56.dp)
@@ -241,6 +271,7 @@ fun ProductsScreen(store: Store) {
                                 refs[p.ean]?.ref?.let { RefPriceLine(it) }
                             }
                         }
+                    }
                     }
                 }
             }
