@@ -165,7 +165,7 @@ class Store(context: Context) {
         get() = prefs.getString("lastStatus", "").orEmpty()
         set(v) = prefs.edit().putString("lastStatus", v).apply()
 
-    /** Prüfprotokoll auf der Treffer-Seite zeigen (nur für die Fehlersuche). */
+    /** Prüfprotokoll auf der Seite „Ergebnisse“ zeigen (nur für die Fehlersuche). */
     var showLog: Boolean
         get() = prefs.getBoolean("showLog", false)
         set(v) = prefs.edit().putBoolean("showLog", v).apply()

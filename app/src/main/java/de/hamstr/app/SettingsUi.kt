@@ -221,7 +221,7 @@ fun SettingsScreen(store: Store) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Prüfprotokoll anzeigen", fontWeight = FontWeight.Bold)
-                Text("Technische Details zur letzten Prüfung auf der Treffer-Seite – nur für die Fehlersuche.",
+                Text("Technische Details zur letzten Prüfung auf der Seite „Ergebnisse“ – nur für die Fehlersuche.",
                     style = MaterialTheme.typography.bodySmall)
             }
             Spacer(Modifier.size(8.dp))

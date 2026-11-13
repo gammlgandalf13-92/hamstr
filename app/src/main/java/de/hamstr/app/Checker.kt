@@ -94,7 +94,7 @@ object Checker {
             history[histKey] = (history[histKey].orEmpty() + h.offer.validFrom).distinct().sorted().takeLast(20)
         }
         if (canNotify && fresh.size > MAX_NOTIFICATIONS) {
-            Notifier.info(context, "Noch ${fresh.size - MAX_NOTIFICATIONS} weitere Treffer", "In Hamstr unter „Treffer“.")
+            Notifier.info(context, "Noch ${fresh.size - MAX_NOTIFICATIONS} weitere Treffer", "In Hamstr unter „Ergebnisse“.")
         }
         if (errors == products.size) {
             Notifier.info(context, "Hamstr: Abruf fehlgeschlagen",

@@ -99,6 +99,8 @@ fun HamstrApp() {
     val ctx = LocalContext.current
     val store = remember { Store(ctx) }
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = settingsOpen) { settingsOpen = false }
     var version by remember { mutableIntStateOf(0) }
 
     val workFlow = remember { WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkFlow(Scheduler.NOW) }
@@ -113,11 +115,35 @@ fun HamstrApp() {
         ) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    val tabs = listOf("🛒" to "Treffer", "📋" to "Produkte", "⚙️" to "Einstellungen")
+    val tabs = listOf("🛒" to "Ergebnisse", "📋" to "Produkte")
     Scaffold(
-        topBar = { TopAppBar(title = { Text("🐹 Hamstr", fontWeight = FontWeight.Bold) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(if (settingsOpen) "Einstellungen" else "🐹 Hamstr", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    if (settingsOpen) {
+                        androidx.compose.material3.IconButton(onClick = { settingsOpen = false }) {
+                            androidx.compose.material3.Icon(
+                                androidx.compose.material.icons.Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Zurück",
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    if (!settingsOpen) {
+                        androidx.compose.material3.IconButton(onClick = { settingsOpen = true }) {
+                            androidx.compose.material3.Icon(
+                                androidx.compose.material.icons.Icons.Filled.Settings,
+                                contentDescription = "Einstellungen",
+                            )
+                        }
+                    }
+                },
+            )
+        },
         bottomBar = {
-            NavigationBar {
+            if (!settingsOpen) NavigationBar {
                 tabs.forEachIndexed { i, (icon, label) ->
                     NavigationBarItem(
                         selected = tab == i,
@@ -130,10 +156,10 @@ fun HamstrApp() {
         },
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            when (tab) {
-                0 -> HitsScreen(store, version, running) { Scheduler.runNow(ctx) }
-                1 -> ProductsScreen(store)
-                else -> SettingsScreen(store)
+            when {
+                settingsOpen -> SettingsScreen(store)
+                tab == 1 -> ProductsScreen(store)
+                else -> HitsScreen(store, version, running) { Scheduler.runNow(ctx) }
             }
         }
     }
@@ -141,7 +167,7 @@ fun HamstrApp() {
     UpdateOnStart()
 }
 
-// ------------------------------------------------------------------ Treffer
+// ------------------------------------------------------------------ Ergebnisse
 @Composable
 fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit) {
     val ctx = LocalContext.current

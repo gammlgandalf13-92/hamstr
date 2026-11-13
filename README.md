@@ -8,8 +8,8 @@ im Prospekt sind. Läuft komplett auf dem Handy – kein Server, kein Konto.
 1. Unter **Releases** (rechts auf der Repo-Seite) die neueste `hamstr-1.0.X.apk` herunterladen – am Handy, im Browser
    oder in der GitHub-App.
 2. Antippen → Android fragt, ob der Browser Apps installieren darf → erlauben → installieren.
-3. Hamstr öffnen, Benachrichtigungen erlauben, unter **Einstellungen** die PLZ eintragen.
-4. Unter **Produkte** deine Artikel anlegen, dann auf **Treffer → Jetzt prüfen**.
+3. Hamstr öffnen, Benachrichtigungen erlauben, über das Zahnrad oben rechts (**Einstellungen**) die PLZ eintragen.
+4. Unter **Produkte** deine Artikel anlegen, dann auf **Ergebnisse → Jetzt prüfen**.
 
 Updates: in der App unter **Einstellungen → Updates → Nach Updates suchen**. Hamstr meldet neue Versionen
 außerdem beim täglichen Check. Einstellungen und Produkte bleiben bei Updates erhalten.
@@ -27,7 +27,7 @@ Die Update-Funktion setzt voraus, dass dieses Repo **öffentlich** ist.
 | Eigene Suchbegriffe | Danach wird bei Marktguru gesucht (alle werden abgefragt). Sonst automatisch Marke + Name. |
 | Nur diese Märkte | Überschreibt die Märkte aus den Einstellungen für dieses Produkt. |
 
-Was geprüft und warum etwas verworfen wurde, steht unter **Treffer → Prüfprotokoll anzeigen**.
+Was geprüft und warum etwas verworfen wurde, steht unter **Ergebnisse → Prüfprotokoll anzeigen** (vorher in den Einstellungen über das Zahnrad oben rechts einschalten).
 
 ## Wie es funktioniert
 
