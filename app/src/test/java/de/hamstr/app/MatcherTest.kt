@@ -246,6 +246,7 @@ class MatcherTest {
         assertNotEquals(a.dedupeKey, c.dedupeKey)
         assertEquals(2.79, Matcher.bestHits(listOf(a, c)).single().offer.price!!, 0.001)
         assertEquals("REWE: Ferrero Nutella", a.title())
+        assertEquals("Ferrero Nutella", a.itemTitle())
         val body = a.body("2026-09-22")
         assertTrue(body, body.contains("2,99 € (statt 4,49 €)"))
         assertTrue(body.contains("Gültig 02.11.–07.11."))

@@ -70,7 +70,8 @@ data class Hit(val product: Product, val offer: Offer, val confidence: Double, v
     val dedupeKey: String
         get() = "${offer.storeSlug}|$itemKey|${offer.validFrom}|${offer.price}"
 
-    fun title(): String {
+    /** Artikelname ohne Markt, z. B. "Ferrero Nutella". */
+    fun itemTitle(): String {
         val names = product.names
         val item = when {
             names.size == 1 -> names[0]
@@ -78,8 +79,11 @@ data class Hit(val product: Product, val offer: Offer, val confidence: Double, v
             names.isNotEmpty() -> names[0]
             else -> offer.description.take(40)
         }
-        return "${offer.store}: " + listOf(product.brand, item).filter { it.isNotBlank() }.joinToString(" ")
+        return listOf(product.brand, item).filter { it.isNotBlank() }.joinToString(" ")
     }
+
+    /** Für Benachrichtigungen: "REWE: Ferrero Nutella". */
+    fun title(): String = "${offer.store}: ${itemTitle()}"
 
     fun body(lastSeen: String? = null): String {
         val lines = mutableListOf<String>()

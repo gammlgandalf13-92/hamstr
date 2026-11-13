@@ -7,12 +7,18 @@ import java.util.UUID
 
 /** Gespeicherter Treffer für die Anzeige in der App. */
 data class SavedHit(
-    val title: String,
+    val title: String,               // Artikelname ohne Markt
     val body: String,
     val url: String,
     val validTo: String,
     val image: String = "",
-)
+    val store: String = "",          // z. B. "ALDI SÜD"
+    val storeSlug: String = "",      // z. B. "aldi-sued" – für die Marktseite bei Marktguru
+) {
+    /** Alle aktuellen Angebote dieses Marktes bei Marktguru. */
+    val storeUrl: String
+        get() = if (storeSlug.isNotBlank()) "https://www.marktguru.de/r/$storeSlug" else ""
+}
 
 /** Alles, was Hamstr sich merkt – lokal auf dem Handy (SharedPreferences als JSON). */
 class Store(context: Context) {
@@ -140,8 +146,15 @@ class Store(context: Context) {
         val arr = JSONArray(prefs.getString("hits", "[]"))
         return (0 until arr.length()).mapNotNull { i ->
             arr.optJSONObject(i)?.let {
-                SavedHit(it.optString("title"), it.optString("body"), it.optString("url"),
-                    it.optString("validTo"), it.optString("image"))
+                var title = it.optString("title")
+                var store = it.optString("store")
+                // Ältere Einträge: Markt steckt noch im Titel ("REWE: Nutella")
+                if (store.isBlank() && title.contains(": ")) {
+                    store = title.substringBefore(": ")
+                    title = title.substringAfter(": ")
+                }
+                SavedHit(title, it.optString("body"), it.optString("url"),
+                    it.optString("validTo"), it.optString("image"), store, it.optString("storeSlug"))
             }
         }
     }
@@ -149,7 +162,8 @@ class Store(context: Context) {
     fun saveHits(hits: List<Hit>) {
         val arr = JSONArray()
         hits.forEach {
-            arr.put(JSONObject().put("title", it.title()).put("body", it.body())
+            arr.put(JSONObject().put("title", it.itemTitle()).put("body", it.body())
+                .put("store", it.offer.store).put("storeSlug", it.offer.storeSlug)
                 .put("url", it.offer.url).put("validTo", it.offer.validTo)
                 .put("image", it.offer.imageUrl.ifBlank { it.product.image }))
         }

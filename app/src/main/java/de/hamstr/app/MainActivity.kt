@@ -171,6 +171,33 @@ fun HamstrApp() {
 }
 
 // ------------------------------------------------------------------ Ergebnisse
+
+/** Kopfzeile eines Marktes. Antippen öffnet alle aktuellen Angebote des Marktes bei Marktguru. */
+@Composable
+private fun StoreHeader(store: String, count: Int, url: String) {
+    val ctx = LocalContext.current
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+            .then(if (url.isNotBlank()) Modifier.clickable {
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } else Modifier),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(store, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Text(if (count == 1) "1 Ergebnis" else "$count Ergebnisse", style = MaterialTheme.typography.bodySmall)
+            }
+            if (url.isNotBlank()) {
+                Text("Alle Angebote ›", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
 @Composable
 fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit) {
     val ctx = LocalContext.current
@@ -211,17 +238,24 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
                     style = MaterialTheme.typography.bodySmall)
             }
         }
-        items(hits) { h ->
-            Card(Modifier.fillMaxWidth().clickable {
-                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
-            }) {
-                Row(Modifier.padding(12.dp)) {
-                    ProductImage(h.image, 72.dp)
-                    Spacer(Modifier.size(12.dp))
-                    Column {
-                        Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(4.dp))
-                        Text(h.body, style = MaterialTheme.typography.bodyMedium)
+        // Nach Markt gruppiert, Märkte alphabetisch
+        val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+        byStore.forEach { (store, storeHits) ->
+            item(key = "store|$store") {
+                StoreHeader(store, storeHits.size, storeHits.first().storeUrl)
+            }
+            items(storeHits) { h ->
+                Card(Modifier.fillMaxWidth().clickable {
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
+                }) {
+                    Row(Modifier.padding(12.dp)) {
+                        ProductImage(h.image, 72.dp)
+                        Spacer(Modifier.size(12.dp))
+                        Column {
+                            Text(h.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(4.dp))
+                            Text(h.body, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }
