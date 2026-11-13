@@ -179,6 +179,17 @@ class Store(context: Context) {
         get() = prefs.getString("lastStatus", "").orEmpty()
         set(v) = prefs.edit().putString("lastStatus", v).apply()
 
+    /** Lieblingsmärkte (Kurznamen wie "rewe", "aldi") – stehen in den Ergebnissen oben. */
+    var favoriteChains: Set<String>
+        get() = prefs.getStringSet("favoriteChains", emptySet())!!.toSet()
+        set(v) = prefs.edit().putStringSet("favoriteChains", v.toSet()).apply()
+
+    fun toggleFavorite(chain: String): Set<String> {
+        val next = if (chain in favoriteChains) favoriteChains - chain else favoriteChains + chain
+        favoriteChains = next
+        return next
+    }
+
     /** Prüfprotokoll auf der Seite „Ergebnisse“ zeigen (nur für die Fehlersuche). */
     var showLog: Boolean
         get() = prefs.getBoolean("showLog", false)

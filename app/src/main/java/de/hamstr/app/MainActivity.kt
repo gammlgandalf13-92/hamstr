@@ -174,7 +174,7 @@ fun HamstrApp() {
 
 /** Kopfzeile eines Marktes. Antippen öffnet alle aktuellen Angebote des Marktes bei Marktguru. */
 @Composable
-private fun StoreHeader(store: String, count: Int, url: String) {
+private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolean, onToggleFavorite: () -> Unit) {
     val ctx = LocalContext.current
     androidx.compose.material3.Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
@@ -187,7 +187,14 @@ private fun StoreHeader(store: String, count: Int, url: String) {
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             } else Modifier),
     ) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 2.dp, end = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.IconButton(onClick = onToggleFavorite) {
+                Text(
+                    if (favorite) "★" else "☆",
+                    fontSize = 24.sp,
+                    color = if (favorite) Color(0xFFF2A900) else MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
             Column(Modifier.weight(1f)) {
                 Text(store, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Text(if (count == 1) "1 Ergebnis" else "$count Ergebnisse", style = MaterialTheme.typography.bodySmall)
@@ -205,6 +212,7 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
     val log = remember(version) { store.log }
     val status = remember(version) { store.lastStatus }
     val logEnabled = remember { store.showLog }
+    var favorites by remember { mutableStateOf(store.favoriteChains) }
     val lastRun = remember(version) { store.lastRun }
     var showLog by rememberSaveable { mutableStateOf(false) }
 
@@ -239,10 +247,16 @@ fun HitsScreen(store: Store, version: Int, running: Boolean, onCheck: () -> Unit
             }
         }
         // Nach Markt gruppiert, Märkte alphabetisch
-        val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER)
-        byStore.forEach { (store, storeHits) ->
-            item(key = "store|$store") {
-                StoreHeader(store, storeHits.size, storeHits.first().storeUrl)
+        // Nach Markt gruppiert: Lieblingsmärkte zuerst, sonst alphabetisch
+        val byStore = hits.groupBy { it.store.ifBlank { "Sonstige" } }.toList().sortedWith(
+            compareBy<Pair<String, List<SavedHit>>>({ Geo.chainKey(it.first) !in favorites }, { it.first.lowercase() })
+        )
+        byStore.forEach { (storeName, storeHits) ->
+            item(key = "store|$storeName") {
+                val chain = Geo.chainKey(storeName)
+                StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
+                    favorites = store.toggleFavorite(chain)
+                }
             }
             items(storeHits) { h ->
                 Card(Modifier.fillMaxWidth().clickable {

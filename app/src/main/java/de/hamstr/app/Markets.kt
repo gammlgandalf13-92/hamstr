@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.util.Locale
 
 /** Eine Kette in der Märkteliste. Distanz/Anzahl stammen aus der letzten Umkreissuche. */
@@ -88,6 +89,7 @@ object Markets {
 @Composable
 fun MarketList(store: Store, refreshKey: Int) {
     var enabled by remember(refreshKey) { mutableStateOf(store.stores.toSet()) }
+    var favorites by remember { mutableStateOf(store.favoriteChains) }
     var info by remember(refreshKey) { mutableStateOf<Map<String, ChainInfo>>(store.chains()) }
     var newChain by remember { mutableStateOf("") }
     var hint by remember { mutableStateOf<String?>(null) }
@@ -132,8 +134,9 @@ fun MarketList(store: Store, refreshKey: Int) {
 
     Text("Meine Märkte", fontWeight = FontWeight.Bold)
     Text(
-        if (searched) "Ketten im Umkreis stehen oben. Nur eingeschaltete Märkte werden gemeldet."
-        else "Nur eingeschaltete Märkte werden gemeldet. Tipp: „Supermärkte im Umkreis finden“ zeigt, was in deiner Nähe ist.",
+        (if (searched) "Ketten im Umkreis stehen oben. Nur eingeschaltete Märkte werden gemeldet."
+        else "Nur eingeschaltete Märkte werden gemeldet. Tipp: „Supermärkte im Umkreis finden“ zeigt, was in deiner Nähe ist.") +
+            " Mit ★ markierst du Lieblingsmärkte – ihre Angebote stehen in den Ergebnissen oben.",
         style = MaterialTheme.typography.bodySmall,
     )
     Card(Modifier.fillMaxWidth()) {
@@ -161,6 +164,14 @@ fun MarketList(store: Store, refreshKey: Int) {
                     }
                     if (key !in Markets.DEFAULTS && c?.distanceKm == null) {
                         TextButton(onClick = { remove(key) }) { Text("✕") }
+                    }
+                    TextButton(onClick = { favorites = store.toggleFavorite(key) }) {
+                        Text(
+                            if (key in favorites) "★" else "☆",
+                            fontSize = 20.sp,
+                            color = if (key in favorites) androidx.compose.ui.graphics.Color(0xFFF2A900)
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Switch(checked = key in enabled, onCheckedChange = { toggle(key, it) })
                 }
