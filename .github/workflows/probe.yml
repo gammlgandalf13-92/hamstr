@@ -8,28 +8,39 @@ jobs:
     steps:
       - name: Endpunkte prüfen
         run: |
+          set +e
           UA="Hamstr/1.0 (Android; privat)"
           HTML=$(curl -s -A "$UA" https://www.marktguru.de/r/rewe)
           API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
           CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
-          echo "keys: ${#API} ${#CLI}"
-          echo "== Seite /r/rewe: api-Pfade im HTML"
-          echo "$HTML" | grep -oE 'api/v1/[A-Za-z0-9_/{}.-]+' | sort | uniq -c | head -40
-          echo "== JS-Bundles"
-          for js in $(echo "$HTML" | grep -oE 'src="[^"]+\.js"' | sed 's/src="//;s/"$//' | head -25); do
+          echo "== JS: Kontext um offers/search und retailerIds"
+          for js in $(echo "$HTML" | grep -oE 'src="[^"]+\.js"' | sed 's/src="//;s/"$//' | head -30); do
             case "$js" in http*) u="$js";; //*) u="https:$js";; *) u="https://www.marktguru.de$js";; esac
-            curl -s -A "$UA" "$u" | grep -oE '(api/v1)?/(offers|retailers|leaflets|industries|advertisers)[A-Za-z0-9_/{}?=&.$-]*' | sort -u | head -30
-          done | sort -u | head -80
-          echo "== __NEXT_DATA__ / state keys"
-          echo "$HTML" | grep -oE '"(retailerId|advertiserId|retailer|uniqueName|id)":[^,]{1,40}' | sort | uniq -c | sort -rn | head -20
+            curl -s -A "$UA" "$u" | grep -oE '.{0,120}(offers/search|retailerIds|retailerId=|leaflets/search|/leaflets/\$|industryId).{0,160}' | head -6
+          done | sort -u | head -30
           H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
-          try() { echo "== $1"; curl -s -o /tmp/o.json -w "HTTP %{http_code} %{size_download}B\n" "${H[@]}" "$1"; head -c 600 /tmp/o.json; echo; python3 -c "import json;d=json.load(open('/tmp/o.json'));print('keys',list(d.keys())[:10] if isinstance(d,dict) else type(d));r=d.get('results') if isinstance(d,dict) else None;print('results',len(r) if r else None,'total',d.get('totalResults') if isinstance(d,dict) else '')" 2>/dev/null; }
           B=https://api.marktguru.de/api/v1
-          try "$B/offers/search?as=web&limit=20&offset=0&q=&zipCode=97539"
-          try "$B/offers/search?as=web&limit=20&offset=0&q=rewe&zipCode=97539"
-          try "$B/retailers/rewe/offers?as=web&limit=20&offset=0&zipCode=97539"
-          try "$B/advertisers/rewe/offers?as=web&limit=20&offset=0&zipCode=97539"
-          try "$B/offers?as=web&limit=20&offset=0&zipCode=97539&retailerUniqueName=rewe"
-          try "$B/retailers/rewe?as=web&zipCode=97539"
-          try "$B/industries/supermarkets/offers?as=web&limit=20&offset=0&zipCode=97539"
+          sum() { python3 - "$1" <<'PY'
+          import json,sys,collections
+          try:
+              d=json.load(open('/tmp/o.json'))
+          except Exception as e:
+              print('kein JSON', open('/tmp/o.json').read()[:300]); sys.exit()
+          r=d.get('results') or []
+          c=collections.Counter(a.get('name') for x in r for a in (x.get('advertisers') or [{}]))
+          v=collections.Counter((x.get('validityDates') or [{}])[0].get('from','')[:10] for x in r)
+          print('total',d.get('totalResults'),'got',len(r),'advertisers',dict(c.most_common(5)),'from',dict(v.most_common(4)))
+          if r: print('cats', collections.Counter((x.get('categories') or [{}])[0].get('name') if x.get('categories') else None for x in r).most_common(6))
+          if r: print('sample', {k:r[0].get(k) for k in ('id','price','oldPrice','description','categories','product')} )
+          PY
+          }
+          try() { echo; echo "== $1"; curl -s -o /tmp/o.json -w "HTTP %{http_code} %{size_download}B\n" "${H[@]}" "$1"; sum; }
+          try "$B/offers/search?as=web&limit=100&offset=0&q=rewe&zipCode=97539"
+          try "$B/offers/search?as=web&limit=100&offset=200&q=rewe&zipCode=97539"
+          try "$B/offers/search?as=web&limit=100&offset=0&q=rewe&zipCode=97539&retailerIds=126802"
+          try "$B/offers/search?as=web&limit=100&offset=0&q=*&zipCode=97539&retailerIds=126802"
+          try "$B/offers/search?as=web&limit=100&offset=0&q=lidl&zipCode=97539"
+          try "$B/offers/search?as=web&limit=100&offset=0&q=aldi%20s%C3%BCd&zipCode=97539"
+          try "$B/offers/search?as=web&limit=100&offset=0&q=edeka&zipCode=97539"
           try "$B/leaflets/search?as=web&limit=10&offset=0&zipCode=97539&q=rewe"
+          try "$B/industries/supermaerkte/offers?as=web&limit=20&offset=0&zipCode=97539"
