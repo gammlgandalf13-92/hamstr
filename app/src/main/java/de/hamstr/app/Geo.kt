@@ -32,7 +32,24 @@ data class NearbyStore(
 
 /** Standort, PLZ ↔ Koordinaten und Supermärkte in der Nähe. Netzwerk-Funktionen blockieren → im Hintergrund aufrufen. */
 object Geo {
-    private const val USER_AGENT = "Hamstr/1.0 (private Android-App)"
+    // Overpass bittet um einen eindeutigen User-Agent mit Kontakt
+    private const val USER_AGENT = "Hamstr/1.0 (private Android-App; +https://github.com/gammlgandalf13-92/hamstr)"
+
+    /**
+     * Öffentliche Overpass-Server (wiki.openstreetmap.org/wiki/Overpass_API). Der Hauptserver ist oft überlastet
+     * (HTTP 429/500/504) – dann nacheinander die anderen, ohne sie mit Wiederholungen zu fluten.
+     */
+    internal val OVERPASS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+        "https://ovp.dresel.systems/api/interpreter",
+    )
+
+    /** Gemeldet, wenn kein Overpass-Server antwortet. */
+    class BusyException : java.io.IOException(
+        "Der Kartendienst (OpenStreetMap) ist gerade überlastet. Bitte in ein paar Minuten noch einmal versuchen."
+    )
 
     // ---------------------------------------------------------------- Standort
     @SuppressLint("MissingPermission")
@@ -93,7 +110,14 @@ object Geo {
         val query = "[out:json][timeout:25];" +
             "nwr[\"shop\"~\"^(supermarket|discount)$\"](around:$r,$lat,$lon);" +
             "out center tags 400;"
-        val body = post("https://overpass-api.de/api/interpreter", "data=" + URLEncoder.encode(query, "UTF-8"))
+        val form = "data=" + URLEncoder.encode(query, "UTF-8")
+        var body: String? = null
+        for (server in OVERPASS) {
+            body = runCatching { post(server, form) }.getOrNull()
+                ?.takeIf { it.trimStart().startsWith("{") } // manche Server liefern bei Überlast eine HTML-Seite
+            if (body != null) break
+        }
+        if (body == null) throw BusyException()
         val elements = JSONObject(body).optJSONArray("elements") ?: return emptyList()
         val out = mutableListOf<NearbyStore>()
         for (i in 0 until elements.length()) {

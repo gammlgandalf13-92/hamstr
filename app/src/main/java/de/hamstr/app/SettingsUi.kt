@@ -137,7 +137,14 @@ fun SettingsScreen(store: Store) {
                 } else {
                     center = c
                     store.center = Triple(c.first, c.second, plz.trim())
-                    val found = withContext(Dispatchers.IO) { Geo.nearbyStores(c.first, c.second, radius.roundToInt()) }
+                    // Gleicher Ort + Umkreis innerhalb von 24 h: gespeichertes Ergebnis statt neuer Anfrage
+                    val queryKey = "%.3f,%.3f,%d".format(Locale.ROOT, c.first, c.second, radius.roundToInt())
+                    val cached = store.nearbyStores().takeIf {
+                        it.isNotEmpty() && store.nearbyQuery == queryKey &&
+                            System.currentTimeMillis() - store.nearbyQueryAt < 24L * 60 * 60 * 1000
+                    }
+                    val found = cached ?: withContext(Dispatchers.IO) { Geo.nearbyStores(c.first, c.second, radius.roundToInt()) }
+                    if (cached == null) store.nearbyQuery = queryKey
                     nearby = found
                     store.saveChains(Markets.applyNearby(store.chains(), found))
                     store.saveNearbyStores(found)
@@ -146,7 +153,8 @@ fun SettingsScreen(store: Store) {
                     if (found.isEmpty()) message = "Keine Supermärkte im Umkreis gefunden – Radius vergrößern?"
                 }
             } catch (e: Exception) {
-                message = "Suche fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
+                message = if (e is Geo.BusyException) e.message
+                else "Suche fehlgeschlagen – bitte später noch einmal versuchen. (${e.message ?: e.javaClass.simpleName})"
             }
             busy = null
         }

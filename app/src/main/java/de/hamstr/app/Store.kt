@@ -219,6 +219,14 @@ class Store(context: Context) {
         prefs.edit().putString("nearbyStores", arr.toString()).apply()
     }
 
+    /** Zu welcher Suche (Ort + Umkreis) gehören die gespeicherten Filialen, und wann wurde gesucht? */
+    var nearbyQuery: String
+        get() = prefs.getString("nearbyQuery", "").orEmpty()
+        set(v) = prefs.edit().putString("nearbyQuery", v).putLong("nearbyQueryAt", System.currentTimeMillis()).apply()
+
+    val nearbyQueryAt: Long
+        get() = prefs.getLong("nearbyQueryAt", 0L)
+
     /** Wann zuletzt je Kette erinnert (gegen Mehrfach-Meldungen). */
     fun atStoreLast(): Map<String, Long> = mapFrom(prefs.getString("atStoreLast", null)) { (it as Number).toLong() }
 
