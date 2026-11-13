@@ -48,6 +48,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.key
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.foundation.pager.HorizontalPager
@@ -101,10 +110,19 @@ import java.util.Locale
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
+    /** Geteilte Produktliste, die mit „Öffnen mit Hamstr“ hereinkam. */
+    private val incoming = mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Scheduler.ensureScheduled(this)
-        setContent { HamstrTheme { HamstrApp() } }
+        if (savedInstanceState == null) incoming.value = Transfer.uriFrom(intent)
+        setContent { HamstrTheme { HamstrApp(incoming.value) { incoming.value = null } } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        Transfer.uriFrom(intent)?.let { incoming.value = it }
     }
 }
 
@@ -118,23 +136,33 @@ fun HamstrTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, content = content)
 }
 
+/** Tabs unten: Ergebnisse, Einkaufsliste, Produkte */
+private const val TAB_RESULTS = 0
+private const val TAB_SHOPPING = 1
+private const val TAB_PRODUCTS = 2
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HamstrApp() {
+fun HamstrApp(incoming: Uri? = null, onIncomingHandled: () -> Unit = {}) {
     val ctx = LocalContext.current
     val store = remember { Store(ctx) }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    var tab by rememberSaveable { mutableIntStateOf(TAB_RESULTS) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = settingsOpen) { settingsOpen = false }
-    // Zurück auf „Produkte“ führt erst zu „Ergebnisse“ – wie in anderen Apps mit Tableiste
-    androidx.activity.compose.BackHandler(enabled = !settingsOpen && tab != 0) { tab = 0 }
+    // Zurück auf anderen Tabs führt erst zu „Ergebnisse“ – wie in anderen Apps mit Tableiste
+    androidx.activity.compose.BackHandler(enabled = !settingsOpen && tab != TAB_RESULTS) { tab = TAB_RESULTS }
     var version by remember { mutableIntStateOf(0) }
+    var shoppingVersion by remember { mutableIntStateOf(0) }
+    var productsVersion by remember { mutableIntStateOf(0) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     val workFlow = remember { WorkManager.getInstance(ctx).getWorkInfosForUniqueWorkFlow(Scheduler.NOW) }
     val work by workFlow.collectAsState(initial = emptyList())
     val running = work.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
     LaunchedEffect(running) { if (!running) version++ }
     val hitCount = remember(version) { store.hits().size }
+    val shoppingCount = remember(shoppingVersion) { store.shoppingList().count { !it.done && !it.expired() } }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
@@ -143,9 +171,33 @@ fun HamstrApp() {
         ) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    // ---------------- Produktliste importieren
+    var importing by remember { mutableStateOf<List<ImportedProduct>?>(null) }
+    var importNew by remember { mutableStateOf<List<ImportedProduct>>(emptyList()) }
+    var importError by remember { mutableStateOf<String?>(null) }
+    fun startImport(uri: Uri) {
+        scope.launch {
+            try {
+                val found = withContext(Dispatchers.IO) { Transfer.read(ctx, uri) }
+                val fresh = ProductTransfer.newOnes(store.products(), found.map { it.product })
+                importNew = found.filter { f -> fresh.any { it.id == f.product.id } }
+                importing = found
+            } catch (e: Exception) {
+                importError = e.message ?: "Die Datei konnte nicht gelesen werden."
+            }
+        }
+    }
+    LaunchedEffect(incoming) {
+        incoming?.let { startImport(it); onIncomingHandled() }
+    }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) startImport(uri)
+    }
+
     val title = when {
         settingsOpen -> "Einstellungen"
-        tab == 1 -> "Produkte"
+        tab == TAB_SHOPPING -> "Einkaufsliste"
+        tab == TAB_PRODUCTS -> "Produkte"
         else -> "Ergebnisse"
     }
     Scaffold(
@@ -160,7 +212,7 @@ fun HamstrApp() {
                     }
                 },
                 actions = {
-                    if (!settingsOpen && tab == 0) {
+                    if (!settingsOpen && tab == TAB_RESULTS) {
                         if (running) {
                             CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.5.dp)
                         } else {
@@ -169,9 +221,43 @@ fun HamstrApp() {
                             }
                         }
                     }
+                    if (!settingsOpen && tab == TAB_SHOPPING && shoppingCount > 0) {
+                        IconButton(onClick = { shareText(ctx, ShareText.list(store.shoppingList()), "Einkaufsliste teilen") }) {
+                            Icon(Icons.Filled.Share, contentDescription = "Einkaufsliste teilen")
+                        }
+                    }
                     if (!settingsOpen) {
                         IconButton(onClick = { settingsOpen = true }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Einstellungen")
+                        }
+                    }
+                    if (!settingsOpen && tab == TAB_PRODUCTS) {
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Weitere Optionen")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Produktliste teilen") },
+                                    leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
+                                    enabled = store.products().isNotEmpty(),
+                                    onClick = {
+                                        menuOpen = false
+                                        scope.launch {
+                                            val file = withContext(Dispatchers.IO) { Transfer.exportFile(ctx, store.products()) }
+                                            ctx.startActivity(Transfer.shareIntent(ctx, file))
+                                        }
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Produktliste importieren") },
+                                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        pickFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -180,18 +266,28 @@ fun HamstrApp() {
         bottomBar = {
             if (!settingsOpen) NavigationBar {
                 NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
+                    selected = tab == TAB_RESULTS,
+                    onClick = { tab = TAB_RESULTS },
                     icon = {
                         BadgedBox(badge = { if (hitCount > 0) Badge { Text(if (hitCount > 99) "99+" else "$hitCount") } }) {
-                            Icon(if (tab == 0) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart, contentDescription = null)
+                            Icon(painterResource(R.drawable.ic_offer), contentDescription = null)
                         }
                     },
                     label = { Text("Ergebnisse") },
                 )
                 NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
+                    selected = tab == TAB_SHOPPING,
+                    onClick = { tab = TAB_SHOPPING },
+                    icon = {
+                        BadgedBox(badge = { if (shoppingCount > 0) Badge { Text("$shoppingCount") } }) {
+                            Icon(if (tab == TAB_SHOPPING) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Einkaufsliste") },
+                )
+                NavigationBarItem(
+                    selected = tab == TAB_PRODUCTS,
+                    onClick = { tab = TAB_PRODUCTS },
                     icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
                     label = { Text("Produkte") },
                 )
@@ -201,15 +297,60 @@ fun HamstrApp() {
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
                 settingsOpen -> SettingsScreen(store)
-                tab == 1 -> ProductsScreen(store)
+                tab == TAB_PRODUCTS -> key(productsVersion) { ProductsScreen(store) }
+                tab == TAB_SHOPPING -> ShoppingScreen(store) { shoppingVersion++ }
                 else -> HitsScreen(
                     store, version, running,
                     onCheck = { Scheduler.runNow(ctx) },
-                    onOpenProducts = { tab = 1 },
+                    onOpenProducts = { tab = TAB_PRODUCTS },
                     onOpenSettings = { settingsOpen = true },
+                    onShoppingChanged = { shoppingVersion++ },
                 )
             }
         }
+    }
+
+    importing?.let { found ->
+        AlertDialog(
+            onDismissRequest = { importing = null },
+            title = { Text("Produktliste importieren") },
+            text = {
+                Text(
+                    if (importNew.isEmpty()) "Alle ${found.size} Produkte aus der Datei beobachtest du schon."
+                    else "In der Datei: ${found.size} Produkte. Neu für dich: ${importNew.size}" +
+                        (if (found.size > importNew.size) " (${found.size - importNew.size} hast du schon)." else ".") +
+                        "\n\nPLZ, Märkte und Prüfzeiten bleiben, wie du sie eingestellt hast."
+                )
+            },
+            confirmButton = {
+                if (importNew.isEmpty()) {
+                    TextButton(onClick = { importing = null }) { Text("OK") }
+                } else {
+                    TextButton(onClick = {
+                        val add = importNew
+                        importing = null
+                        scope.launch {
+                            val products = withContext(Dispatchers.IO) { Transfer.materialize(ctx, add) }
+                            store.saveProducts(store.products() + products)
+                            productsVersion++
+                            settingsOpen = false
+                            tab = TAB_PRODUCTS
+                        }
+                    }) { Text("Hinzufügen") }
+                }
+            },
+            dismissButton = {
+                if (importNew.isNotEmpty()) TextButton(onClick = { importing = null }) { Text("Abbrechen") }
+            },
+        )
+    }
+    importError?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { importError = null },
+            title = { Text("Import nicht möglich") },
+            text = { Text(msg) },
+            confirmButton = { TextButton(onClick = { importError = null }) { Text("OK") } },
+        )
     }
 
     UpdateOnStart()
@@ -261,9 +402,31 @@ fun HitsScreen(
     onCheck: () -> Unit,
     onOpenProducts: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShoppingChanged: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val hits = remember(version) { store.hits() }
+    // Einkaufsliste: welche Angebote stehen schon drauf?
+    var listIds by remember { mutableStateOf(store.shoppingList().map { it.id }.toSet()) }
+    fun toggleList(h: SavedHit) {
+        val item = ShoppingItem.fromHit(h)
+        val list = store.shoppingList()
+        val next = if (list.any { it.id == item.id }) list.filterNot { it.id == item.id } else list + item
+        store.saveShoppingList(next)
+        listIds = next.map { it.id }.toSet()
+        onShoppingChanged()
+    }
+    // Preisverlauf je Produkt (nur Einzelprodukte – bei Marken mischen sich verschiedene Artikel)
+    val statsByProduct = remember(version) {
+        val log = store.priceLog()
+        store.products().filter { it.names.isNotEmpty() }.associate { p -> p.id to PriceHistory.stats(log[p.id].orEmpty()) }
+    }
+    val actions = HitActions(
+        listIds = listIds,
+        onToggleList = { toggleList(it) },
+        onShare = { shareText(ctx, ShareText.offer(it), "Angebot teilen") },
+        stats = statsByProduct,
+    )
     val log = remember(version) { store.log }
     val status = remember(version) { store.lastStatus }
     val logEnabled = remember { store.showLog }
@@ -304,17 +467,25 @@ fun HitsScreen(
         PullToRefreshBox(isRefreshing = running, onRefresh = onCheck, modifier = Modifier.weight(1f).fillMaxWidth()) {
             if (!showTabs) {
                 HitsList(store, emptyList(), null, today, status, lastRun, running, favorites, { favorites = it },
-                    refByProduct, logEnabled, log, onCheck, onOpenProducts, onOpenSettings, hits.isEmpty())
+                    refByProduct, logEnabled, log, onCheck, onOpenProducts, onOpenSettings, hits.isEmpty(), actions)
             } else {
                 HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
                     val w = weeks[page]
                     HitsList(store, weekHits[w], w, today, status, lastRun, running, favorites, { favorites = it },
-                        refByProduct, logEnabled && page == 0, log, onCheck, onOpenProducts, onOpenSettings, false)
+                        refByProduct, logEnabled && page == 0, log, onCheck, onOpenProducts, onOpenSettings, false, actions)
                 }
             }
         }
     }
 }
+
+/** Was man mit einem Angebot tun kann – und was Hamstr über frühere Angebote weiß. */
+class HitActions(
+    val listIds: Set<String>,
+    val onToggleList: (SavedHit) -> Unit,
+    val onShare: (SavedHit) -> Unit,
+    val stats: Map<String, PriceStats?>,
+)
 
 /** Liste einer Woche: Status, Märkte mit ihren Angeboten, ggf. Prüfprotokoll. */
 @Composable
@@ -335,6 +506,7 @@ private fun HitsList(
     onOpenProducts: () -> Unit,
     onOpenSettings: () -> Unit,
     noHitsAtAll: Boolean,
+    actions: HitActions,
 ) {
     val ctx = LocalContext.current
     var showLog by rememberSaveable { mutableStateOf(false) }
@@ -412,7 +584,14 @@ private fun HitsList(
                         image = h.image, title = h.title, description = h.description,
                         price = h.price, oldPrice = h.oldPrice, validFrom = h.validFrom, validTo = h.validTo,
                         hint = h.notes.split(" · ").filterNot { it.startsWith("gilt erst ab") }.joinToString(" · "),
-                        ref = refByProduct[h.productId], onClick = { open() },
+                        ref = refByProduct[h.productId],
+                        history = actions.stats[h.productId]?.takeIf { it.periods >= 2 }
+                            ?.let { PriceHistory.summary(it, h.price) }.orEmpty(),
+                        best = PriceHistory.isBest(h.price, actions.stats[h.productId]),
+                        onList = ShoppingItem.fromHit(h).id in actions.listIds,
+                        onToggleList = { actions.onToggleList(h) },
+                        onShare = { actions.onShare(h) },
+                        onClick = { open() },
                     )
                 } else {
                     // Ältere gespeicherte Treffer ohne Einzelfelder

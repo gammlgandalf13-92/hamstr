@@ -3,4 +3,6 @@
     <cache-path name="updates" path="updates/" />
     <!-- Kamera-Fotos landen hier kurz, bevor Hamstr sie verkleinert übernimmt -->
     <cache-path name="photos" path="photos/" />
+    <!-- Produktliste zum Teilen -->
+    <cache-path name="export" path="export/" />
 </paths>

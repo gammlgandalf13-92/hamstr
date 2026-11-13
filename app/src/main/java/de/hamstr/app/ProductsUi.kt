@@ -127,6 +127,7 @@ fun ProductsScreen(store: Store) {
     val snackbar = remember { SnackbarHostState() }
     var undoJob by remember { mutableStateOf<Job?>(null) }
     var refs by remember { mutableStateOf(store.refPrices()) }
+    val priceLog = remember { store.priceLog() }
 
     fun persist() = store.saveProducts(products.toList())
 
@@ -268,6 +269,15 @@ fun ProductsScreen(store: Store) {
                                 if (details.isNotEmpty()) {
                                     Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
                                 }
+                                PriceHistory.stats(priceLog[p.id].orEmpty())?.let { st ->
+                                    val last = st.last?.let { " · zuletzt ${Matcher.shortDate(it.validFrom)} (${it.store})" }.orEmpty()
+                                    Text(
+                                        (if (p.names.isNotEmpty()) PriceHistory.summary(st)
+                                        else if (st.periods == 1) "1× im Angebot" else "${st.periods}× im Angebot") + last,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
                                 refs[p.ean]?.ref?.let { RefPriceLine(it) }
                             }
                         }
@@ -290,6 +300,7 @@ fun ProductsScreen(store: Store) {
             isNew = isNew,
             tip = tip,
             ref = refs[current.ean]?.ref,
+            history = priceLog[current.id].orEmpty(),
             onDismiss = { editing = null },
             onSave = { save(it); editing = null },
             onDelete = if (isNew) null else {
@@ -607,6 +618,7 @@ fun ProductDialog(
     isNew: Boolean,
     tip: String? = null,
     ref: RefPrice? = null,
+    history: List<PricePoint> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (Product) -> Unit,
     onDelete: (() -> Unit)?,
@@ -771,6 +783,33 @@ fun ProductDialog(
                         "Tipp: Im Namen mehrere Schreibweisen mit | trennen – eine davon muss passen.",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                if (history.isNotEmpty()) {
+                    Spacer(Modifier.size(8.dp))
+                    Text("Preisverlauf", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    PriceHistory.stats(history)?.let { st ->
+                        Text(
+                            PriceHistory.summary(st) + " · beobachtet seit ${Matcher.shortDate(st.since)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    val lowest = history.mapNotNull { it.price }.minOrNull()
+                    history.sortedByDescending { it.validFrom }.take(12).forEach { pt ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(Matcher.shortDate(pt.validFrom), style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.size(width = 56.dp, height = 22.dp))
+                            Text(pt.store, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                pt.price?.let { Matcher.euro(it) } ?: "–",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (pt.price != null && pt.price == lowest) FontWeight.Bold else FontWeight.Normal,
+                                color = if (pt.price != null && pt.price == lowest) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
                 }
                 if (onDelete != null) {
                     Spacer(Modifier.size(16.dp))

@@ -68,6 +68,15 @@ object Images {
         null
     }
 
+    /** Bild aus einer Importdatei speichern. */
+    fun saveBytes(context: Context, bytes: ByteArray, productId: String): String? = try {
+        val target = File(dir(context), "$productId.img")
+        target.writeBytes(bytes)
+        target.absolutePath
+    } catch (e: Exception) {
+        null
+    }
+
     /** Alle Bilder eines Produkts löschen. */
     fun delete(context: Context, productId: String) {
         dir(context).listFiles()?.filter { it.name.startsWith(productId) }?.forEach { it.delete() }

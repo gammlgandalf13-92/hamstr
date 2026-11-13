@@ -311,4 +311,57 @@ class MatcherTest {
         val h = hit(nutella, offer("7", "REWE", "rewe", "Ferrero", "Nutella", "je 450-g-Glas", 2.49, from = "2026-11-09", to = "2026-11-14"))!!
         assertTrue(h.hintText(), !h.hintText().contains("gilt erst ab"))
     }
+
+    // ---------------- Preisverlauf
+    private fun pt(store: String, price: Double?, from: String, title: String = "Ferrero Nutella") =
+        PricePoint(store, store.lowercase(), price, from, from, title)
+
+    @Test fun priceHistory() {
+        val a = listOf(pt("Lidl", 2.29, "2026-09-07"), pt("REWE", 2.49, "2026-09-28"))
+        val merged = PriceHistory.merge(a, listOf(pt("REWE", 2.49, "2026-09-28"), pt("Aldi", 1.99, "2026-10-19")), today)
+        assertEquals(3, merged.size)                        // Dublette fällt raus
+        assertEquals("2026-10-19", merged.last().validFrom) // nach Datum sortiert
+        val st = PriceHistory.stats(merged)!!
+        assertEquals(3, st.periods)
+        assertEquals(1.99, st.lowest!!.price!!, 0.001)
+        assertEquals(21, st.intervalDays)                   // 07.09. → 19.10. = 42 Tage / 2
+        assertEquals("etwa alle 3 Wochen", PriceHistory.intervalText(21))
+        assertEquals("etwa jede Woche", PriceHistory.intervalText(7))
+        assertEquals("Tiefstpreis 1,99 € (Aldi) · 3× im Angebot · etwa alle 3 Wochen", PriceHistory.summary(st))
+        assertTrue(PriceHistory.isBest(1.99, st))
+        assertTrue(!PriceHistory.isBest(2.29, st))
+        assertEquals("3× im Angebot · etwa alle 3 Wochen", PriceHistory.summary(st, 1.89))
+        // Ein einziges Angebot ist noch kein „Bestpreis“
+        assertTrue(!PriceHistory.isBest(1.0, PriceHistory.stats(listOf(pt("Lidl", 1.0, "2026-11-02")))))
+        // Älter als 2 Jahre fliegt raus
+        assertEquals(0, PriceHistory.merge(emptyList(), listOf(pt("Lidl", 1.0, "2024-01-01")), today).size)
+    }
+
+    // ---------------- Einkaufsliste & Teilen
+    @Test fun shoppingAndShare() {
+        val h = SavedHit("Ferrero Nutella", "", "https://www.marktguru.de/offers/42", "2026-11-07",
+            store = "REWE", storeSlug = "rewe", price = 1.99, oldPrice = 3.49, validFrom = "2026-11-02")
+        assertEquals("REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 07.11.\nhttps://www.marktguru.de/offers/42",
+            ShareText.offer(h, today))
+        val item = ShoppingItem.fromHit(h, now = 1L)
+        assertEquals("https://www.marktguru.de/offers/42", item.id)
+        assertTrue(!item.expired(today))
+        assertTrue(item.expired(LocalDate.of(2026, 11, 8)))
+        assertTrue(!ShoppingItem("x", "Milch").expired(today)) // eigene Einträge laufen nie ab
+        val text = ShareText.list(listOf(item, ShoppingItem("y", "Milch"), ShoppingItem("z", "Brot", done = true)), today)
+        assertTrue(text, text.contains("REWE\n• Ferrero Nutella – 1,99 € (bis Sa., 07.11.)"))
+        assertTrue(text, text.contains("Sonstiges\n• Milch"))
+        assertTrue(text, !text.contains("Brot"))
+    }
+
+    @Test fun importSkipsKnownProducts() {
+        val mine = listOf(nutella, Product("2", names = listOf("Cola"), brand = "Coca-Cola", ean = "5000112546415"))
+        val incoming = listOf(
+            nutella.copy(id = "a"),                                                   // gleicher Name/Marke/Größe
+            Product("b", names = listOf("Cola Zero"), brand = "Coca-Cola", ean = "5000112546415"), // gleicher Barcode
+            Product("c", names = listOf("Hafermilch"), brand = "Oatly"),
+            Product("d", names = listOf("Hafermilch"), brand = "Oatly"),              // doppelt in der Datei
+        )
+        assertEquals(listOf("c"), ProductTransfer.newOnes(mine, incoming).map { it.id })
+    }
 }

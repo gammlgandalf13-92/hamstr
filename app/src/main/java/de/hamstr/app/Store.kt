@@ -190,6 +190,72 @@ class Store(context: Context) {
         prefs.edit().putString("hits", arr.toString()).apply()
     }
 
+    // ---------------- Preisverlauf (eigene Beobachtungen) ----------------
+    fun priceLog(): Map<String, List<PricePoint>> {
+        val raw = prefs.getString("priceLog", null) ?: return emptyMap()
+        val o = JSONObject(raw)
+        return o.keys().asSequence().associateWith { k ->
+            val a = o.getJSONArray(k)
+            (0 until a.length()).mapNotNull { i ->
+                a.optJSONObject(i)?.let {
+                    PricePoint(
+                        store = it.optString("s"), storeSlug = it.optString("ss"),
+                        price = if (it.has("p")) it.optDouble("p") else null,
+                        validFrom = it.optString("f"), validTo = it.optString("t"), title = it.optString("n"),
+                    )
+                }
+            }
+        }
+    }
+
+    /** Gefundene Angebote je Produkt merken. */
+    @Synchronized
+    fun recordPrices(hits: List<Hit>) {
+        if (hits.isEmpty()) return
+        val log = priceLog().toMutableMap()
+        hits.groupBy { it.product.id }.forEach { (id, list) ->
+            val points = list.map {
+                PricePoint(it.offer.store, it.offer.storeSlug, it.offer.price, it.offer.validFrom, it.offer.validTo, it.itemTitle())
+            }
+            log[id] = PriceHistory.merge(log[id].orEmpty(), points)
+        }
+        val o = JSONObject()
+        log.forEach { (id, points) ->
+            o.put(id, JSONArray(points.map { pt ->
+                JSONObject().put("s", pt.store).put("ss", pt.storeSlug).put("f", pt.validFrom).put("t", pt.validTo)
+                    .put("n", pt.title).apply { pt.price?.let { put("p", it) } }
+            }))
+        }
+        prefs.edit().putString("priceLog", o.toString()).apply()
+    }
+
+    // ---------------- Einkaufsliste ----------------
+    fun shoppingList(): List<ShoppingItem> {
+        val arr = JSONArray(prefs.getString("shopping", "[]"))
+        return (0 until arr.length()).mapNotNull { i ->
+            arr.optJSONObject(i)?.let {
+                ShoppingItem(
+                    id = it.optString("id"), title = it.optString("title"), store = it.optString("store"),
+                    storeSlug = it.optString("storeSlug"),
+                    price = if (it.has("price")) it.optDouble("price") else null,
+                    validFrom = it.optString("validFrom"), validTo = it.optString("validTo"),
+                    url = it.optString("url"), image = it.optString("image"),
+                    done = it.optBoolean("done"), addedAt = it.optLong("addedAt"),
+                )
+            }
+        }
+    }
+
+    fun saveShoppingList(list: List<ShoppingItem>) {
+        val arr = JSONArray()
+        list.forEach { i ->
+            arr.put(JSONObject().put("id", i.id).put("title", i.title).put("store", i.store).put("storeSlug", i.storeSlug)
+                .put("validFrom", i.validFrom).put("validTo", i.validTo).put("url", i.url).put("image", i.image)
+                .put("done", i.done).put("addedAt", i.addedAt).apply { i.price?.let { put("price", it) } })
+        }
+        prefs.edit().putString("shopping", arr.toString()).apply()
+    }
+
     // ---------------- Vergleichspreise (Open Prices) ----------------
     fun refPrices(): Map<String, RefEntry> {
         val raw = prefs.getString("refPrices", null) ?: return emptyMap()
@@ -251,7 +317,7 @@ class Store(context: Context) {
         return out
     }
 
-    private fun productTo(p: Product): JSONObject = JSONObject()
+    internal fun productTo(p: Product): JSONObject = JSONObject()
         .put("id", p.id)
         .put("names", JSONArray(p.names))
         .put("brand", p.brand)
@@ -265,7 +331,7 @@ class Store(context: Context) {
         .put("ean", p.ean)
         .apply { p.maxPrice?.let { put("maxPrice", it) } }
 
-    private fun productFrom(o: JSONObject): Product {
+    internal fun productFrom(o: JSONObject): Product {
         fun list(key: String): List<String> {
             val a = o.optJSONArray(key) ?: return emptyList()
             return (0 until a.length()).map { a.getString(it) }.filter { it.isNotBlank() }

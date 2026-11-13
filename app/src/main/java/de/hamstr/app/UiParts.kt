@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.IconButton
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -46,6 +50,11 @@ fun OfferCard(
     store: String = "",
     hint: String = "",
     ref: RefPrice? = null,
+    history: String = "",          // „Tiefstpreis 1,99 € (Lidl) · 4× im Angebot“
+    best: Boolean = false,         // bester Preis, den Hamstr bisher gesehen hat
+    onList: Boolean? = null,       // null = kein Listen-Knopf
+    onToggleList: () -> Unit = {},
+    onShare: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth().clickable(onClick = onClick)) {
@@ -86,6 +95,18 @@ fun OfferCard(
                             textDecoration = TextDecoration.LineThrough, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 2.dp))
                     }
+                    if (best) {
+                        Spacer(Modifier.size(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(bottom = 3.dp),
+                        ) {
+                            Text("Bestpreis", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        }
+                    }
                 }
                 val validity = Matcher.validityText(validFrom, validTo)
                 val meta = listOf(store, validity).filter { it.isNotBlank() }.joinToString(" · ")
@@ -94,6 +115,10 @@ fun OfferCard(
                         color = if (validity == "nur noch heute") MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                if (history.isNotBlank()) {
+                    Text(history, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp))
+                }
                 ref?.let { RefPriceLine(it, price) }
                 if (hint.isNotBlank()) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
@@ -101,6 +126,20 @@ fun OfferCard(
                             tint = MaterialTheme.colorScheme.tertiary)
                         Spacer(Modifier.size(4.dp))
                         Text(hint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (onShare != null || onList != null) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        onShare?.let {
+                            IconButton(onClick = it) { Icon(Icons.Filled.Share, contentDescription = "Angebot teilen") }
+                        }
+                        if (onList != null) {
+                            IconButton(onClick = onToggleList) {
+                                if (onList) Icon(Icons.Filled.Check, contentDescription = "Von der Einkaufsliste nehmen",
+                                    tint = MaterialTheme.colorScheme.primary)
+                                else Icon(Icons.Filled.Add, contentDescription = "Auf die Einkaufsliste")
+                            }
+                        }
                     }
                 }
             }

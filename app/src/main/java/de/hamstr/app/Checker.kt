@@ -78,6 +78,7 @@ object Checker {
 
         val best = Matcher.bestHits(all).sortedWith(compareBy<Hit>({ -it.confidence }, { it.offer.store }))
         st.saveHits(best)
+        runCatching { st.recordPrices(best) }
         upgradeImages(context, st, products, best, log)
 
         // Vergleichspreise (Open Prices) für Produkte mit Barcode – höchstens einmal pro Woche
