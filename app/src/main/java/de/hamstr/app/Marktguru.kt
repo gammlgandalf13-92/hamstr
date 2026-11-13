@@ -52,14 +52,17 @@ object Marktguru {
         return (live ?: (FALLBACK_API_KEY to FALLBACK_CLIENT_KEY)).also { cachedKeys = it }
     }
 
-    fun search(query: String, plz: String): List<Offer> {
-        val url = SEARCH + "?as=web&limit=100&offset=0&q=" + URLEncoder.encode(query, "UTF-8") +
+    fun search(query: String, plz: String): List<Offer> = parse(fetch(query, plz, 0, 100))
+
+    /** Eine Seite Suchergebnisse als JSON (mit Wiederholung bei Überlast). */
+    private fun fetch(query: String, plz: String, offset: Int, limit: Int): String {
+        val url = SEARCH + "?as=web&limit=$limit&offset=$offset&q=" + URLEncoder.encode(query, "UTF-8") +
             "&zipCode=" + URLEncoder.encode(plz, "UTF-8")
         val (api, client) = keys()
         repeat(4) { attempt ->
             val (code, body) = get(url, mapOf("x-apikey" to api, "x-clientkey" to client))
             when (code) {
-                200 -> return parse(body)
+                200 -> return body
                 429, 500, 502, 503, 504 -> Thread.sleep(3_000L shl attempt)
                 else -> {
                     if (code == 401 || code == 403) cachedKeys = null
@@ -68,6 +71,31 @@ object Marktguru {
             }
         }
         throw IOException("Marktguru antwortet nicht")
+    }
+
+    /** Eine Seite aller Angebote eines Marktes. */
+    class Page(val offers: List<Offer>, val total: Int)
+
+    /**
+     * Alle Angebote eines Marktes: Die Suche nach dem Namen des Marktes liefert dessen kompletten Prospekt
+     * (z. B. „REWE“ → alle REWE-Angebote). Nur Angebote genau dieses Marktes werden behalten.
+     */
+    fun marketPage(name: String, slug: String, plz: String, offset: Int, limit: Int = 100): Page {
+        fun load(q: String): Page {
+            val body = fetch(q, plz, offset, limit)
+            val total = runCatching { JSONObject(body).optInt("totalResults", 0) }.getOrDefault(0)
+            val chain = Geo.chainKey(name)
+            val offers = parse(body).filter {
+                (slug.isNotBlank() && it.storeSlug == slug) || Geo.chainKey(it.store) == chain
+            }
+            return Page(offers, total)
+        }
+        val first = load(name)
+        // Manche Märkte heißen in der Suche anders als im Angebot (z. B. „E center“) → Kurzname probieren
+        if (first.total == 0 && slug.isNotBlank() && Matcher.norm(slug.replace("-", " ")) != Matcher.norm(name)) {
+            return load(slug.replace("-", " "))
+        }
+        return first
     }
 
     private fun str(o: JSONObject?, key: String): String =
@@ -128,6 +156,7 @@ object Marktguru {
                     validTo = str(validity, "to").take(10),
                     url = OFFER_URL + id,
                     imageUrl = image,
+                    category = str(r.optJSONArray("categories")?.optJSONObject(0), "name"),
                 )
             }
         }

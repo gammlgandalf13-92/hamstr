@@ -171,6 +171,12 @@ fun HamstrApp(
     var shoppingVersion by remember { mutableIntStateOf(0) }
     var productsVersion by remember { mutableIntStateOf(0) }
     var menuOpen by remember { mutableStateOf(false) }
+    var productsOpenSearch by remember { mutableStateOf(false) }
+    // Einrichtungs-Assistent nur bei einer frischen Installation (bestehende Nutzer haben schon eine PLZ)
+    var setup by rememberSaveable {
+        mutableStateOf(!store.setupDone && store.plz.isBlank() && store.products().isEmpty())
+    }
+    LaunchedEffect(Unit) { if (!setup && !store.setupDone) store.setupDone = true }
     var shareMenuOpen by remember { mutableStateOf(false) }
     LaunchedEffect(openTab) {
         openTab?.let { tab = it; settingsOpen = false; shoppingVersion++; onOpenTabHandled() }
@@ -213,6 +219,22 @@ fun HamstrApp(
         if (uri != null) startImport(uri)
     }
 
+    if (setup) {
+        SetupWizard(store) { finish ->
+            store.setupDone = true
+            setup = false
+            settingsOpen = false
+            when (finish) {
+                SetupFinish.SEARCH -> { productsOpenSearch = true; tab = TAB_PRODUCTS }
+                SetupFinish.IMPORT -> {
+                    tab = TAB_PRODUCTS
+                    pickFile.launch(arrayOf("application/json", "application/octet-stream", "text/plain"))
+                }
+                SetupFinish.LATER -> tab = TAB_RESULTS
+            }
+            version++
+        }
+    } else {
     val title = when {
         settingsOpen -> "Einstellungen"
         tab == TAB_SHOPPING -> "Einkaufsliste"
@@ -334,7 +356,10 @@ fun HamstrApp(
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
                 settingsOpen -> SettingsScreen(store)
-                tab == TAB_PRODUCTS -> key(productsVersion) { ProductsScreen(store) }
+                tab == TAB_PRODUCTS -> key(productsVersion) {
+                    ProductsScreen(store, productsOpenSearch)
+                    LaunchedEffect(Unit) { productsOpenSearch = false }
+                }
                 tab == TAB_SHOPPING -> ShoppingScreen(store) { shoppingVersion++ }
                 else -> HitsScreen(
                     store, version, running,
@@ -345,6 +370,8 @@ fun HamstrApp(
                 )
             }
         }
+    }
+
     }
 
     importing?.let { found ->
@@ -397,8 +424,7 @@ fun HamstrApp(
 
 /** Kopfzeile eines Marktes. Antippen öffnet alle aktuellen Angebote des Marktes bei Marktguru. */
 @Composable
-private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolean, onToggleFavorite: () -> Unit) {
-    val ctx = LocalContext.current
+private fun StoreHeader(store: String, count: Int, onOpen: () -> Unit, favorite: Boolean, onToggleFavorite: () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -406,9 +432,7 @@ private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolea
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
-            .then(if (url.isNotBlank()) Modifier.clickable {
-                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            } else Modifier),
+            .clickable(onClick = onOpen),
     ) {
         Row(Modifier.padding(start = 2.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onToggleFavorite) {
@@ -422,10 +446,8 @@ private fun StoreHeader(store: String, count: Int, url: String, favorite: Boolea
                 Text(store, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Text(if (count == 1) "1 Angebot" else "$count Angebote", style = MaterialTheme.typography.bodySmall)
             }
-            if (url.isNotBlank()) {
-                Text("Alle", style = MaterialTheme.typography.labelLarge)
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Alle Angebote des Marktes")
-            }
+            Text("Prospekt", style = MaterialTheme.typography.labelLarge)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Alle Angebote des Marktes")
         }
     }
 }
@@ -458,7 +480,21 @@ fun HitsScreen(
         val log = store.priceLog()
         store.products().filter { it.names.isNotEmpty() }.associate { p -> p.id to PriceHistory.stats(log[p.id].orEmpty()) }
     }
+    // Prospekt eines Marktes in der App
+    var market by remember { mutableStateOf<MarketTarget?>(null) }
+    val prospects = remember(version) {
+        val known = hits.map { it.store to it.storeSlug } +
+            store.priceLog().values.flatten().map { it.store to it.storeSlug } +
+            store.shoppingList().map { it.store to it.storeSlug }
+        MarketBrowse.targets(store.stores, store.favoriteChains, known)
+    }
     val actions = HitActions(
+        onOpenMarket = { name, slug ->
+            val chain = Geo.chainKey(name)
+            market = prospects.firstOrNull { it.slug == slug || it.chain == chain }?.let {
+                if (slug.isNotBlank()) it.copy(name = name, slug = slug) else it
+            } ?: MarketTarget(name, slug, chain)
+        },
         listIds = listIds,
         onToggleList = { toggleList(it) },
         onShare = { shareText(ctx, ShareText.offer(it), "Angebot teilen") },
@@ -488,7 +524,16 @@ fun HitsScreen(
     // Start in der ersten Woche, die etwas hat (z. B. sonntags schon die nächste Woche)
     val pager = rememberPagerState(initialPage = weeks.firstOrNull { weekHits[it].isNotEmpty() } ?: 0) { weeks.size }
 
+    market?.let { m ->
+        MarketScreen(store, m, onClose = { market = null; listIds = store.shoppingList().map { it.id }.toSet() },
+            onShoppingChanged = onShoppingChanged)
+    }
+
     Column(Modifier.fillMaxSize()) {
+        if (status != "no_plz") {
+            Spacer(Modifier.height(8.dp))
+            ProspectChips(prospects) { market = it }
+        }
         if (showTabs) {
             TabRow(selectedTabIndex = pager.currentPage.coerceAtMost(weeks.lastIndex)) {
                 weeks.forEachIndexed { i, w ->
@@ -518,6 +563,7 @@ fun HitsScreen(
 
 /** Was man mit einem Angebot tun kann – und was Hamstr über frühere Angebote weiß. */
 class HitActions(
+    val onOpenMarket: (name: String, slug: String) -> Unit,
     val listIds: Set<String>,
     val onToggleList: (SavedHit) -> Unit,
     val onShare: (SavedHit) -> Unit,
@@ -610,7 +656,8 @@ private fun HitsList(
         byStore.forEach { (storeName, storeHits) ->
             item(key = "store|$storeName") {
                 val chain = Geo.chainKey(storeName)
-                StoreHeader(storeName, storeHits.size, storeHits.first().storeUrl, chain in favorites) {
+                StoreHeader(storeName, storeHits.size, { actions.onOpenMarket(storeName, storeHits.first().storeSlug) },
+                    chain in favorites) {
                     onFavorites(store.toggleFavorite(chain))
                 }
             }

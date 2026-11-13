@@ -47,6 +47,7 @@ data class Offer(
     val validTo: String,
     val url: String,
     val imageUrl: String = "",
+    val category: String = "",   // z. B. „Softdrinks“ – aus dem Prospekt
 ) {
     val displayName: String
         get() = listOf(brand, productName).filter { it.isNotBlank() }.joinToString(" ").ifBlank { description.take(50) }

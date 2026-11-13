@@ -122,6 +122,11 @@ data class ShoppingItem(
         validTo.isNotBlank() && validTo < today.toString()
 
     companion object {
+        fun fromOffer(o: Offer, now: Long = System.currentTimeMillis()) = ShoppingItem(
+            id = o.url, title = o.displayName, store = o.store, storeSlug = o.storeSlug, price = o.price,
+            validFrom = o.validFrom, validTo = o.validTo, url = o.url, image = o.imageUrl, addedAt = now,
+        )
+
         fun fromHit(h: SavedHit, now: Long = System.currentTimeMillis()) = ShoppingItem(
             id = h.url.ifBlank { "${h.storeSlug}|${h.title}|${h.validFrom}" },
             title = h.title, store = h.store, storeSlug = h.storeSlug, price = h.price,
@@ -131,6 +136,8 @@ data class ShoppingItem(
 }
 
 object ShareText {
+    fun offer(o: Offer): String = (if (o.store.isNotBlank()) "${o.store}: " else "") + o.displayName.trim() + " (Angebot)"
+
     /** Für die Einkaufsliste: „REWE: Ferrero Nutella (Angebot)“ – Markt vorne, damit man sieht, wo es günstig ist. */
     fun offer(h: SavedHit): String =
         (if (h.store.isNotBlank()) "${h.store}: " else "") + h.title.trim() + " (Angebot)"

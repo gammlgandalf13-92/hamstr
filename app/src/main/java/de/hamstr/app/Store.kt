@@ -190,6 +190,11 @@ class Store(context: Context) {
         prefs.edit().putString("hits", arr.toString()).apply()
     }
 
+    /** Einrichtungs-Assistent erledigt (oder übersprungen). */
+    var setupDone: Boolean
+        get() = prefs.getBoolean("setupDone", false)
+        set(v) = prefs.edit().putBoolean("setupDone", v).apply()
+
     // ---------------- Am Markt erinnern (Test) ----------------
     var atStoreEnabled: Boolean
         get() = prefs.getBoolean("atStoreEnabled", false)

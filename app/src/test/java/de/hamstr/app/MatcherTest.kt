@@ -398,4 +398,27 @@ class MatcherTest {
         assertEquals(listOf("lidl", "rewe"), AtStore.pick(shops, listOf("rewe", "lidl")).map { it.chain })
         assertEquals("Ferrero Nutella\nMilch", ShareText.names(list + ShoppingItem("y", "Brot", done = true)))
     }
+
+    // ---------------- Prospekt eines Marktes
+    @Test fun marketBrowse() {
+        // Genauer Name aus gesehenen Angeboten, sonst Standard; Lieblingsmärkte zuerst
+        val t = MarketBrowse.targets(listOf("rewe", "aldi", "edeka"), setOf("aldi"),
+            listOf("ALDI SÜD" to "aldi-sued", "ALDI SÜD" to "aldi-sued", "REWE" to "rewe"))
+        assertEquals(listOf("ALDI SÜD", "REWE", "EDEKA"), t.map { it.name })
+        assertEquals("aldi-sued", t.first().slug)
+
+        fun o(id: String, name: String, cat: String, from: String = "2026-11-02", to: String = "2026-11-07") =
+            Offer(id, "REWE", "rewe", name, "", "", 1.0, null, from, to, "u$id", category = cat)
+        val offers = listOf(
+            o("1", "Gouda jung", "Käse"), o("2", "Emmentaler", "Käse"), o("3", "Cola", "Softdrinks"),
+            o("4", "Bergkäse", "Käse", "2026-11-09", "2026-11-14"), o("5", "Alt", "Käse", "2026-10-26", "2026-10-31"),
+        )
+        assertEquals(listOf("Käse", "Softdrinks"), MarketBrowse.categories(offers))
+        assertEquals(listOf("1", "2", "3", "4"), MarketBrowse.filter(offers, "", null, null, today).map { it.id }) // abgelaufen fehlt
+        assertEquals(listOf("1"), MarketBrowse.filter(offers, "gouda", null, null, today).map { it.id })
+        assertEquals(listOf("4"), MarketBrowse.filter(offers, "", 1, null, today).map { it.id })
+        assertEquals(listOf("3"), MarketBrowse.filter(offers, "", 0, "Softdrinks", today).map { it.id })
+        assertEquals("REWE: Gouda jung (Angebot)", ShareText.offer(offers[0]))
+        assertEquals("u1", ShoppingItem.fromOffer(offers[0]).id)
+    }
 }

@@ -115,13 +115,13 @@ fun ProductImage(image: String, size: Dp) {
 // ------------------------------------------------------------------ Produkte
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProductsScreen(store: Store) {
+fun ProductsScreen(store: Store, openSearch: Boolean = false) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val products = remember { mutableStateListOf<Product>().apply { addAll(store.products()) } }
     var editing by remember { mutableStateOf<Product?>(null) }
     var isNew by remember { mutableStateOf(false) }
-    var searching by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(openSearch) }
     var tip by remember { mutableStateOf<String?>(null) }
     var confirmDelete by remember { mutableStateOf<Product?>(null) }
     val snackbar = remember { SnackbarHostState() }
