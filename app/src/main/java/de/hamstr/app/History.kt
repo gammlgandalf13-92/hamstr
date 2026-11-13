@@ -131,8 +131,9 @@ data class ShoppingItem(
 }
 
 object ShareText {
-    /** Nur der Artikel, z. B. „Ferrero Nutella“ – passt so direkt in jede Einkaufsliste. */
-    fun offer(h: SavedHit): String = h.title.trim()
+    /** Für die Einkaufsliste: „REWE: Ferrero Nutella (Angebot)“ – Markt vorne, damit man sieht, wo es günstig ist. */
+    fun offer(h: SavedHit): String =
+        (if (h.store.isNotBlank()) "${h.store}: " else "") + h.title.trim() + " (Angebot)"
 
     /** Ausführlich: „REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 15.11.“ + Link (derzeit ungenutzt). */
     fun offerDetails(h: SavedHit, today: LocalDate = LocalDate.now()): String {

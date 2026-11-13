@@ -352,7 +352,7 @@ class MatcherTest {
             store = "REWE", storeSlug = "rewe", price = 1.99, oldPrice = 3.49, validFrom = "2026-11-02")
         assertEquals("REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 07.11.\nhttps://www.marktguru.de/offers/42",
             ShareText.offerDetails(h, today))
-        assertEquals("Ferrero Nutella", ShareText.offer(h))
+        assertEquals("REWE: Ferrero Nutella (Angebot)", ShareText.offer(h))
         val item = ShoppingItem.fromHit(h, now = 1L)
         assertEquals("https://www.marktguru.de/offers/42", item.id)
         assertTrue(!item.expired(today))
