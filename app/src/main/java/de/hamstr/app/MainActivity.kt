@@ -585,8 +585,8 @@ private fun HitsList(
                         price = h.price, oldPrice = h.oldPrice, validFrom = h.validFrom, validTo = h.validTo,
                         hint = h.notes.split(" · ").filterNot { it.startsWith("gilt erst ab") }.joinToString(" · "),
                         ref = refByProduct[h.productId],
-                        history = actions.stats[h.productId]?.takeIf { it.periods >= 2 }
-                            ?.let { PriceHistory.summary(it, h.price) }.orEmpty(),
+                        lowestText = PriceHistory.compareText(h.price, actions.stats[h.productId]).orEmpty(),
+                        history = PriceHistory.frequencyText(actions.stats[h.productId]).orEmpty(),
                         best = PriceHistory.isBest(h.price, actions.stats[h.productId]),
                         onList = ShoppingItem.fromHit(h).id in actions.listIds,
                         onToggleList = { actions.onToggleList(h) },

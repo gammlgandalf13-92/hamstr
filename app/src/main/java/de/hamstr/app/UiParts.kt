@@ -50,7 +50,8 @@ fun OfferCard(
     store: String = "",
     hint: String = "",
     ref: RefPrice? = null,
-    history: String = "",          // „Tiefstpreis 1,99 € (Lidl) · 4× im Angebot“
+    lowestText: String = "",       // „Tiefstpreis bisher: 1,99 € bei Lidl (03.11.) · 0,50 € mehr“
+    history: String = "",          // „4× im Angebot · etwa alle 3 Wochen“
     best: Boolean = false,         // bester Preis, den Hamstr bisher gesehen hat
     onList: Boolean? = null,       // null = kein Listen-Knopf
     onToggleList: () -> Unit = {},
@@ -107,6 +108,10 @@ fun OfferCard(
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
+                }
+                if (lowestText.isNotBlank()) {
+                    Text(lowestText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface)
                 }
                 val validity = Matcher.validityText(validFrom, validTo)
                 val meta = listOf(store, validity).filter { it.isNotBlank() }.joinToString(" · ")

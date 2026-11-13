@@ -19,6 +19,7 @@ data class PricePoint(
 /** Zusammenfassung des Preisverlaufs eines Produkts. */
 data class PriceStats(
     val periods: Int,            // wie oft im Angebot (verschiedene Starttage)
+    val count: Int,              // gesehene Angebote insgesamt (auch mehrere Märkte am selben Tag)
     val lowest: PricePoint?,     // günstigstes Angebot bisher
     val last: PricePoint?,       // jüngstes Angebot
     val intervalDays: Int?,      // ungefährer Abstand zwischen Angeboten
@@ -50,6 +51,7 @@ object PriceHistory {
         } else null
         return PriceStats(
             periods = starts.size,
+            count = dated.size,
             lowest = dated.filter { it.price != null }.minByOrNull { it.price!! },
             last = dated.last(),
             intervalDays = interval,
@@ -57,10 +59,29 @@ object PriceHistory {
         )
     }
 
-    /** Ist dieser Preis der beste, den Hamstr bisher gesehen hat? Erst ab zwei verschiedenen Angeboten sinnvoll. */
+    /** Ist dieser Preis der beste, den Hamstr bisher gesehen hat? Erst ab zwei gesehenen Angeboten sinnvoll. */
     fun isBest(price: Double?, stats: PriceStats?): Boolean {
         val low = stats?.lowest?.price ?: return false
-        return price != null && stats.periods >= 2 && price <= low + 0.001
+        return price != null && stats.count >= 2 && price <= low + 0.001
+    }
+
+    /**
+     * Vergleich für die Angebotskarte, direkt unter dem Preis:
+     * „Tiefstpreis bisher: 1,99 € bei Lidl (03.11.) · 0,50 € mehr“. null, wenn es nichts Günstigeres gab.
+     */
+    fun compareText(price: Double?, stats: PriceStats?): String? {
+        val low = stats?.lowest ?: return null
+        val lowPrice = low.price ?: return null
+        if (price == null || price <= lowPrice + 0.001) return null
+        val diff = Matcher.euro(price - lowPrice)
+        val date = if (low.validFrom.isNotBlank()) " (${Matcher.shortDate(low.validFrom)})" else ""
+        return "Tiefstpreis bisher: ${Matcher.euro(lowPrice)} bei ${low.store}$date · $diff mehr"
+    }
+
+    /** Zusatz für die Karte: wie oft und wie regelmäßig im Angebot (erst ab zwei Terminen). */
+    fun frequencyText(stats: PriceStats?): String? {
+        if (stats == null || stats.periods < 2) return null
+        return listOfNotNull("${stats.periods}× im Angebot", stats.intervalDays?.let { intervalText(it) }).joinToString(" · ")
     }
 
     /** „etwa alle 3 Wochen“, „etwa alle 10 Tage“ */

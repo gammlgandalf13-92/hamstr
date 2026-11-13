@@ -331,6 +331,15 @@ class MatcherTest {
         assertTrue(PriceHistory.isBest(1.99, st))
         assertTrue(!PriceHistory.isBest(2.29, st))
         assertEquals("3× im Angebot · etwa alle 3 Wochen", PriceHistory.summary(st, 1.89))
+        // Vergleich an der Angebotskarte
+        assertEquals("Tiefstpreis bisher: 1,99 € bei Aldi (19.10.) · 0,50 € mehr", PriceHistory.compareText(2.49, st))
+        assertNull(PriceHistory.compareText(1.99, st))
+        assertEquals("3× im Angebot · etwa alle 3 Wochen", PriceHistory.frequencyText(st))
+        // Gleiche Woche, zwei Märkte: schon vergleichbar, auch wenn erst ein Termin bekannt ist
+        val sameWeek = PriceHistory.stats(listOf(pt("REWE", 2.49, "2026-11-02"), pt("Lidl", 1.99, "2026-11-02")))!!
+        assertEquals("Tiefstpreis bisher: 1,99 € bei Lidl (02.11.) · 0,50 € mehr", PriceHistory.compareText(2.49, sameWeek))
+        assertTrue(PriceHistory.isBest(1.99, sameWeek))
+        assertNull(PriceHistory.frequencyText(sameWeek))
         // Ein einziges Angebot ist noch kein „Bestpreis“
         assertTrue(!PriceHistory.isBest(1.0, PriceHistory.stats(listOf(pt("Lidl", 1.0, "2026-11-02")))))
         // Älter als 2 Jahre fliegt raus
