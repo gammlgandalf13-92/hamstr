@@ -260,6 +260,19 @@ fun HamstrApp(
                                         shareText(ctx, ShareText.names(store.shoppingList()), "Einkaufsliste teilen")
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("Artikel kopieren (zum Einfügen in eine andere Liste)") },
+                                    onClick = {
+                                        shareMenuOpen = false
+                                        val cm = ctx.getSystemService(android.content.ClipboardManager::class.java)
+                                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("Einkaufsliste",
+                                            ShareText.names(store.shoppingList())))
+                                        // Ab Android 13 zeigt das System selbst eine Bestätigung
+                                        if (Build.VERSION.SDK_INT < 33) {
+                                            android.widget.Toast.makeText(ctx, "Kopiert", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
