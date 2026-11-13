@@ -131,8 +131,11 @@ data class ShoppingItem(
 }
 
 object ShareText {
-    /** „REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 15.11.“ + Link */
-    fun offer(h: SavedHit, today: LocalDate = LocalDate.now()): String {
+    /** Nur der Artikel, z. B. „Ferrero Nutella“ – passt so direkt in jede Einkaufsliste. */
+    fun offer(h: SavedHit): String = h.title.trim()
+
+    /** Ausführlich: „REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 15.11.“ + Link (derzeit ungenutzt). */
+    fun offerDetails(h: SavedHit, today: LocalDate = LocalDate.now()): String {
         val price = h.price?.let { " für ${Matcher.euro(it)}" }.orEmpty() +
             (if (h.oldPrice != null && h.price != null && h.oldPrice > h.price) " (statt ${Matcher.euro(h.oldPrice)})" else "")
         val validity = Matcher.validityText(h.validFrom, h.validTo, today).let { if (it.isNotBlank()) ", $it" else "" }

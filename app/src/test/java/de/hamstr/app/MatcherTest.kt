@@ -351,7 +351,8 @@ class MatcherTest {
         val h = SavedHit("Ferrero Nutella", "", "https://www.marktguru.de/offers/42", "2026-11-07",
             store = "REWE", storeSlug = "rewe", price = 1.99, oldPrice = 3.49, validFrom = "2026-11-02")
         assertEquals("REWE: Ferrero Nutella für 1,99 € (statt 3,49 €), bis Sa., 07.11.\nhttps://www.marktguru.de/offers/42",
-            ShareText.offer(h, today))
+            ShareText.offerDetails(h, today))
+        assertEquals("Ferrero Nutella", ShareText.offer(h))
         val item = ShoppingItem.fromHit(h, now = 1L)
         assertEquals("https://www.marktguru.de/offers/42", item.id)
         assertTrue(!item.expired(today))
