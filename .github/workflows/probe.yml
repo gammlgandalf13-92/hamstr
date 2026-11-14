@@ -15,19 +15,13 @@ jobs:
           CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
           H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
           B=https://api.marktguru.de/api/v1
-          for q in butter milch kaffee nudeln joghurt bier "edeka" "e center" "edeka center" "marktkauf" "norma" "edeka nordbayern" "e-center"; do
-            curl -s "${H[@]}" "$B/offers/search?as=web&limit=100&offset=0&q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$q")&zipCode=97539" -o /tmp/o.json
-            python3 - "$q" <<'PY'
+          for z in 97539 97421 97070 96047 90402 80331 20095 50667 10115; do
+            for q in edeka norma "edeka center" marktkauf penny kaufland; do
+              curl -s "${H[@]}" "$B/offers/search?as=web&limit=100&offset=0&q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$q")&zipCode=$z" -o /tmp/o.json
+              python3 -c "
           import json,sys,collections
-          d=json.load(open('/tmp/o.json'))
-          r=d.get('results') or []
-          ret=[(x.get('name'),x.get('resultsCount')) for x in ((d.get('filters') or {}).get('retailers') or [])]
-          adv=collections.Counter((a.get('name'),a.get('uniqueName')) for x in r for a in (x.get('advertisers') or []))
-          print(f"q={sys.argv[1]!r} total={d.get('totalResults')} retailers={ret}")
-          print("   advertisers:", [k for k in adv if k[0] and ('ede' in k[0].lower() or 'center' in k[0].lower() or 'norma' in k[0].lower() or 'kauf' in k[0].lower())] or list(adv)[:6])
-          if sys.argv[1]=='norma':
-              for x in r[:3]: print('   norma-hit:', (x.get('product') or {}).get('name'), [a.get('name') for a in x.get('advertisers') or []], x.get('validityDates'))
-          PY
+          d=json.load(open('/tmp/o.json')); r=d.get('results') or []
+          adv=collections.Counter(a.get('name')+'|'+a.get('uniqueName','') for x in r for a in (x.get('advertisers') or []))
+          print('$z', repr('$q'), d.get('totalResults'), dict(adv.most_common(3)))"
+            done
           done
-          echo "== Händlerseiten"
-          for s in edeka e-center edeka-center norma marktkauf; do echo "$s: $(curl -s -o /dev/null -w '%{http_code}' -A "$UA" https://www.marktguru.de/r/$s)"; done
