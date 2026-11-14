@@ -298,7 +298,7 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                         onList = o.url in listIds,
                         onToggleList = { toggleList(o) },
                         onShare = { shareText(ctx, ShareText.offer(o), "Angebot teilen") },
-                        onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(o.url))) },
+                        onClick = { LeafletLink.open(ctx, scope, o.url) },
                     )
                 }
                 item {

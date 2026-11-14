@@ -73,6 +73,42 @@ object Marktguru {
         throw IOException("Marktguru antwortet nicht")
     }
 
+    /** Angebots-ID aus der Angebotsseite („…/offers/25652307“). */
+    fun offerIdFrom(url: String): String? =
+        Regex("/offers/(\\d+)").find(url)?.groupValues?.get(1)
+
+    /**
+     * Die Prospektseite, auf der das Angebot steht – so wie „Im Prospekt ansehen“ bei Marktguru:
+     * passenden Prospekt für den Standort holen (nächster Markt), dann die Seite des Angebots darin.
+     * null, wenn das nicht klappt (dann zeigt die App die Angebotsseite).
+     */
+    fun leafletPageUrl(offerId: String, plz: String, lat: Double, lon: Double): String? {
+        val (api, client) = keys()
+        val h = mapOf("x-apikey" to api, "x-clientkey" to client)
+        val base = "https://api.marktguru.de/api/v1/offers/$offerId"
+        val (code, body) = get(
+            "$base/bestleaflet?zipCode=${URLEncoder.encode(plz, "UTF-8")}" +
+                "&latitude=${"%.5f".format(java.util.Locale.ROOT, lat)}&longitude=${"%.5f".format(java.util.Locale.ROOT, lon)}" +
+                "&as=mobiledetailed",
+            h,
+        )
+        if (code != 200) return null
+        val leafletId = JSONObject(body).optLong("id", 0L).takeIf { it > 0 } ?: return null
+        val (rc, refs) = get("$base/references?as=mobile", h)
+        val page = if (rc == 200) pageIndexIn(refs, leafletId) else 0
+        return "https://www.marktguru.de/leaflets/$leafletId/page/$page"
+    }
+
+    /** Seitenzahl des Angebots in einem bestimmten Prospekt (0, wenn nicht gefunden). */
+    internal fun pageIndexIn(referencesJson: String, leafletId: Long): Int {
+        val arr = runCatching { JSONObject(referencesJson).optJSONArray("references") }.getOrNull() ?: return 0
+        for (i in 0 until arr.length()) {
+            val r = arr.optJSONObject(i) ?: continue
+            if (r.optLong("leafletId") == leafletId) return r.optInt("pageIndex", 0)
+        }
+        return 0
+    }
+
     /** Eine Seite aller Angebote eines Marktes. */
     class Page(val offers: List<Offer>, val total: Int)
 

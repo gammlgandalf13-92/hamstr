@@ -456,4 +456,10 @@ class MatcherTest {
         assertEquals("Vegane Steaks", RetailerApps.searchTerm("Vegane Steaks 2x160 g"))
         assertEquals("Bio Kräuterseitlinge", RetailerApps.searchTerm("Bio Kräuterseitlinge 125-g-Schale"))
     }
+
+    // ---------------- Prospektseite eines Angebots
+    @Test fun leafletLink() {
+        assertEquals("25652307", Marktguru.offerIdFrom("https://www.marktguru.de/offers/25652307"))
+        assertNull(Marktguru.offerIdFrom("https://www.rewe.de/"))
+    }
 }

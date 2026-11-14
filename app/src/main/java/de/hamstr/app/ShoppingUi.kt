@@ -179,7 +179,7 @@ fun ShoppingScreen(store: Store, onChanged: () -> Unit) {
                     SwipeRow(onRemove = { remove(item) }) {
                         ShoppingRow(item, onToggle = { toggle(item) }) {
                             if (item.url.isNotBlank()) {
-                                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+                                LeafletLink.open(ctx, scope, item.url)
                             }
                         }
                     }

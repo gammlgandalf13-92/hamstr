@@ -602,6 +602,7 @@ private fun HitsList(
     actions: HitActions,
 ) {
     val ctx = LocalContext.current
+    val linkScope = rememberCoroutineScope()
     var showLog by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -672,8 +673,8 @@ private fun HitsList(
                 }
             }
             items(storeHits) { h ->
-                // Angebot antippen: Angebotsseite bei Marktguru (zur App des Marktes geht es über „App“ an der Kopfzeile)
-                val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
+                // Angebot antippen: Prospektseite bei Marktguru, auf der es steht (sonst Angebotsseite)
+                val open = { LeafletLink.open(ctx, linkScope, h.url) }
                 if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
                     OfferCard(
                         image = h.image, title = h.title, description = h.description,
