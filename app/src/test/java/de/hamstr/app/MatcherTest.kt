@@ -452,5 +452,8 @@ class MatcherTest {
         assertTrue(RetailerApps.retailerFor("REWE")!!.search!!.contains("{q}"))
         assertTrue(RetailerApps.retailerFor("Lidl")!!.search!!.contains("{q}"))
         assertNull(RetailerApps.retailerFor("ALDI SÜD")!!.search)
+        assertEquals("planted", RetailerApps.searchTerm("planted Vegane Steak", "planted"))
+        assertEquals("Vegane Steaks", RetailerApps.searchTerm("Vegane Steaks 2x160 g"))
+        assertEquals("Bio Kräuterseitlinge", RetailerApps.searchTerm("Bio Kräuterseitlinge 125-g-Schale"))
     }
 }

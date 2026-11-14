@@ -116,6 +116,7 @@ data class ShoppingItem(
     val image: String = "",
     val done: Boolean = false,
     val addedAt: Long = 0L,
+    val brand: String = "",
 ) {
     /** Abgelaufene Angebote fliegen von selbst raus; eigene Einträge (ohne Datum) bleiben. */
     fun expired(today: LocalDate = LocalDate.now()): Boolean =
@@ -125,12 +126,14 @@ data class ShoppingItem(
         fun fromOffer(o: Offer, now: Long = System.currentTimeMillis()) = ShoppingItem(
             id = o.url, title = o.displayName, store = o.store, storeSlug = o.storeSlug, price = o.price,
             validFrom = o.validFrom, validTo = o.validTo, url = o.url, image = o.imageUrl, addedAt = now,
+            brand = o.brand,
         )
 
         fun fromHit(h: SavedHit, now: Long = System.currentTimeMillis()) = ShoppingItem(
             id = h.url.ifBlank { "${h.storeSlug}|${h.title}|${h.validFrom}" },
             title = h.title, store = h.store, storeSlug = h.storeSlug, price = h.price,
             validFrom = h.validFrom, validTo = h.validTo, url = h.url, image = h.image, addedAt = now,
+            brand = h.brand,
         )
     }
 }

@@ -77,13 +77,24 @@ object RetailerApps {
     }
 
     /**
+     * Suchbegriff für die Produktsuche beim Markt: Prospekt-Namen weichen vom Online-Sortiment ab
+     * („planted Vegane Steak“ vs. „planted.steak“) – deshalb nur die Marke, sonst die ersten zwei Wörter.
+     */
+    fun searchTerm(title: String, brand: String = ""): String {
+        if (brand.isNotBlank()) return brand.trim()
+        val words = title.split(" ", ",", "-").map { it.trim() }
+            .filter { w -> w.isNotBlank() && w.none { it.isDigit() } && w.length > 1 }
+        return words.take(2).joinToString(" ").ifBlank { title.trim() }
+    }
+
+    /**
      * Angebot antippen: Produktsuche des Marktes mit dem Namen öffnen – möglichst in der App
      * (wenn sie solche Links annimmt), sonst im Browser. Märkte ohne bekannte Suche: App/Website.
      */
     fun openSearch(context: Context, storeOrChain: String, query: String): Boolean {
         val r = retailerFor(storeOrChain) ?: return false
         val template = r.search ?: return open(context, storeOrChain)
-        val uri = Uri.parse(template.replace("{q}", Uri.encode(query.trim())))
+        val uri = Uri.parse(template.replace("{q}", Uri.encode(query.trim()).replace("%20", "+")))
         val view = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         // Erst gezielt die installierte Händler-App fragen, ob sie den Link öffnen kann
         appIntent(context, r)?.let { it.component?.packageName ?: it.`package` }?.let { pkg ->

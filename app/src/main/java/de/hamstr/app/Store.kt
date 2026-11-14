@@ -20,6 +20,7 @@ data class SavedHit(
     val validFrom: String = "",
     val description: String = "",
     val notes: String = "",          // Hinweise wie „Größe abweichend“, „Unsicherer Treffer“
+    val brand: String = "",          // Marke laut Prospekt – für die Produktsuche beim Markt
 ) {
     /** Alle aktuellen Angebote dieses Marktes bei Marktguru. */
     val storeUrl: String
@@ -168,6 +169,7 @@ class Store(context: Context) {
                     validFrom = it.optString("validFrom"),
                     description = it.optString("description"),
                     notes = it.optString("notes"),
+                    brand = it.optString("brand"),
                 )
             }
         }
@@ -182,6 +184,7 @@ class Store(context: Context) {
                 .put("image", it.offer.imageUrl.ifBlank { it.product.image })
                 .put("productId", it.product.id).put("validFrom", it.offer.validFrom)
                 .put("description", it.offer.description.take(140)).put("notes", it.hintText())
+                .put("brand", it.offer.brand)
                 .apply {
                     it.offer.price?.let { v -> put("price", v) }
                     it.offer.oldPrice?.let { v -> put("oldPrice", v) }
@@ -302,6 +305,7 @@ class Store(context: Context) {
                     validFrom = it.optString("validFrom"), validTo = it.optString("validTo"),
                     url = it.optString("url"), image = it.optString("image"),
                     done = it.optBoolean("done"), addedAt = it.optLong("addedAt"),
+                    brand = it.optString("brand"),
                 )
             }
         }
@@ -312,7 +316,8 @@ class Store(context: Context) {
         list.forEach { i ->
             arr.put(JSONObject().put("id", i.id).put("title", i.title).put("store", i.store).put("storeSlug", i.storeSlug)
                 .put("validFrom", i.validFrom).put("validTo", i.validTo).put("url", i.url).put("image", i.image)
-                .put("done", i.done).put("addedAt", i.addedAt).apply { i.price?.let { put("price", it) } })
+                .put("done", i.done).put("addedAt", i.addedAt).put("brand", i.brand)
+                .apply { i.price?.let { put("price", it) } })
         }
         prefs.edit().putString("shopping", arr.toString()).apply()
     }
