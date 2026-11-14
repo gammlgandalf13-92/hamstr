@@ -6,31 +6,29 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: App-Links und Suche prüfen
+      - name: Prospekt-Felder prüfen
         run: |
           set +e
-          UA="Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36"
-          echo "== assetlinks.json (Domain → App-Pakete)"
-          for d in www.rewe.de rewe.de shop.rewe.de www.lidl.de lidl.de www.aldi-sued.de aldi-sued.de www.kaufland.de filiale.kaufland.de www.penny.de penny.de www.netto-online.de netto-online.de www.edeka.de edeka.de www.norma-online.de; do
-            code=$(curl -s -L -A "$UA" -o /tmp/a.json -w '%{http_code}' "https://$d/.well-known/assetlinks.json")
-            pk=$(python3 -c "
+          UA="Hamstr/1.0 (Android; privat)"
+          HTML=$(curl -s -A "$UA" https://www.marktguru.de/)
+          API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
+          CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
+          curl -s -H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA" "https://api.marktguru.de/api/v1/offers/search?as=web&limit=5&offset=0&q=planted&zipCode=97539" -o /tmp/o.json
+          python3 - <<'PY'
           import json
-          try:
-              d=json.load(open('/tmp/a.json'))
-              print(sorted({x['target'].get('package_name') for x in d if x.get('target',{}).get('namespace')=='android_app'}))
-          except Exception as e: print('kein JSON')")
-            echo "$d: HTTP $code $pk"
-          done
-          echo; echo "== Suchseiten"
-          for u in \
-            "https://www.rewe.de/suche/?searchTerm=planted" "https://shop.rewe.de/productList?search=planted" "https://www.rewe.de/suche/?search=planted" \
-            "https://www.lidl.de/q/search?q=planted" \
-            "https://www.aldi-sued.de/de/suchergebnisse.html?search=planted" "https://www.aldi-sued.de/suche?q=planted" "https://www.aldi-sued.de/de/suche.html?q=planted" \
-            "https://www.kaufland.de/s/?search_value=planted" "https://filiale.kaufland.de/suche.html?q=planted" \
-            "https://www.penny.de/suche?query=planted" "https://www.penny.de/suche?q=planted" \
-            "https://www.netto-online.de/search?q=planted" "https://www.netto-online.de/suche?q=planted" \
-            "https://www.edeka.de/suche.jsp?query=planted" "https://www.norma-online.de/de/suche/?q=planted"; do
-            r=$(curl -s -L -A "$UA" -o /tmp/s.html -w '%{http_code} %{url_effective}' "$u")
-            n=$(grep -oi "planted" /tmp/s.html | wc -l)
-            echo "$r  (planted ×$n, $(wc -c </tmp/s.html)B)"
-          done
+          d=json.load(open('/tmp/o.json'))
+          for r in d.get('results',[])[:3]:
+              print('== offer', r.get('id'), (r.get('product') or {}).get('name'), [a.get('name') for a in r.get('advertisers') or []])
+              print('   keys:', sorted(r.keys()))
+              for k,v in r.items():
+                  s=json.dumps(v)
+                  if 'leaflet' in k.lower() or 'page' in k.lower() or 'flight' in k.lower() or 'leaflet' in s.lower():
+                      print('  ', k, '=', s[:400])
+          PY
+          ID=$(python3 -c "import json;print(json.load(open('/tmp/o.json'))['results'][0]['id'])")
+          echo "== Angebotsseite $ID"
+          curl -s -A "$UA" "https://www.marktguru.de/offers/$ID" -o /tmp/p.html
+          grep -oE '/leaflets/[0-9]+(/page/[0-9]+)?' /tmp/p.html | sort | uniq -c | head
+          grep -oE '.{0,80}leaflet.{0,120}' /tmp/p.html | head -5
+          echo "== Einzelangebot API"
+          curl -s -H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA" "https://api.marktguru.de/api/v1/offers/$ID?as=web" | head -c 1500; echo
