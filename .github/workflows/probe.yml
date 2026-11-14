@@ -6,22 +6,22 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Händlernamen prüfen
+      - name: EDEKA-Website prüfen
         run: |
           set +e
-          UA="Hamstr/1.0 (Android; privat)"
-          HTML=$(curl -s -A "$UA" https://www.marktguru.de/)
-          API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
-          CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
-          H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
-          B=https://api.marktguru.de/api/v1
-          for z in 97539 97421 97070 96047 90402 80331 20095 50667 10115; do
-            for q in edeka norma "edeka center" marktkauf penny kaufland; do
-              curl -s "${H[@]}" "$B/offers/search?as=web&limit=100&offset=0&q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$q")&zipCode=$z" -o /tmp/o.json
-              python3 -c "
-          import json,sys,collections
-          d=json.load(open('/tmp/o.json')); r=d.get('results') or []
-          adv=collections.Counter(a.get('name')+'|'+a.get('uniqueName','') for x in r for a in (x.get('advertisers') or []))
-          print('$z', repr('$q'), d.get('totalResults'), dict(adv.most_common(3)))"
-            done
-          done
+          UA="Mozilla/5.0 (Linux; Android 14) Hamstr/1.0 (privat)"
+          t() { echo; echo "== $1"; curl -s -L -A "$UA" -H "Accept: application/json, text/html" -o /tmp/r -w "HTTP %{http_code} %{content_type} %{size_download}B %{url_effective}\n" "$1"; head -c 700 /tmp/r | tr '\n' ' '; echo; }
+          t "https://www.edeka.de/api/marketsearch/markets?searchstring=97437"
+          t "https://www.edeka.de/api/marketsearch/markets?searchstring=Ha%C3%9Ffurt"
+          t "https://www.edeka.de/api/marketsearch/markets?coordinates=lat%3D50.03%26lon%3D10.51&maxDistance=15000"
+          t "https://www.edeka.de/eh/service/eh/ods/markets?searchstring=97437"
+          t "https://www.edeka.de/api/offers?marketId=4314021182307&limit=5"
+          t "https://www.edeka.de/eh/service/eh/offers?marketId=4314021182307&limit=5"
+          t "https://www.edeka.de/api/offers?limit=5"
+          echo; echo "== Startseite: api-Pfade in HTML/JS"
+          curl -s -A "$UA" https://www.edeka.de/ -o /tmp/home.html; echo "home $(wc -c </tmp/home.html)B"
+          grep -oE '"/api/[A-Za-z0-9/_-]+|/eh/service/[A-Za-z0-9/_-]+' /tmp/home.html | sort -u | head -20
+          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/home.html | sed 's/src="//;s/"$//' | head -30); do
+            case "$js" in http*) u="$js";; //*) u="https:$js";; *) u="https://www.edeka.de$js";; esac
+            curl -s -A "$UA" "$u" | grep -oE '.{0,40}(/api/(offers|marketsearch|markets)[A-Za-z0-9/_?=&{}$.-]*|/eh/service/[A-Za-z0-9/_-]+).{0,80}' | head -5
+          done | sort -u | head -30
