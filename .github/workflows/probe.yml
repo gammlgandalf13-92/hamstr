@@ -6,29 +6,27 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Prospekt-Felder prüfen
+      - name: Prospekt-Zuordnung prüfen
         run: |
           set +e
           UA="Hamstr/1.0 (Android; privat)"
           HTML=$(curl -s -A "$UA" https://www.marktguru.de/)
           API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
           CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
-          curl -s -H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA" "https://api.marktguru.de/api/v1/offers/search?as=web&limit=5&offset=0&q=planted&zipCode=97539" -o /tmp/o.json
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/o.json'))
-          for r in d.get('results',[])[:3]:
-              print('== offer', r.get('id'), (r.get('product') or {}).get('name'), [a.get('name') for a in r.get('advertisers') or []])
-              print('   keys:', sorted(r.keys()))
-              for k,v in r.items():
-                  s=json.dumps(v)
-                  if 'leaflet' in k.lower() or 'page' in k.lower() or 'flight' in k.lower() or 'leaflet' in s.lower():
-                      print('  ', k, '=', s[:400])
-          PY
-          ID=$(python3 -c "import json;print(json.load(open('/tmp/o.json'))['results'][0]['id'])")
-          echo "== Angebotsseite $ID"
+          H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
+          B=https://api.marktguru.de/api/v1
+          ID=25652307; FL=300682
+          echo "== Angebotsseite: Zahlen 6525892 / leafletId"
           curl -s -A "$UA" "https://www.marktguru.de/offers/$ID" -o /tmp/p.html
-          grep -oE '/leaflets/[0-9]+(/page/[0-9]+)?' /tmp/p.html | sort | uniq -c | head
-          grep -oE '.{0,80}leaflet.{0,120}' /tmp/p.html | head -5
-          echo "== Einzelangebot API"
-          curl -s -H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA" "https://api.marktguru.de/api/v1/offers/$ID?as=web" | head -c 1500; echo
+          grep -oE '.{0,100}(6525892|leafletId|leaflet_id|pageIndex|pageNumber|"page").{0,100}' /tmp/p.html | head -8
+          JS=$(grep -oE 'src="/offer[^"]+\.js"' /tmp/p.html | head -1 | sed 's/src="//;s/"$//')
+          echo "== JS $JS"
+          curl -s -A "$UA" "https://www.marktguru.de$JS" | grep -oE '.{0,150}(leaflets/|leafletFlight|leaflet-flights|leafletflights|/pages).{0,150}' | head -12
+          t() { echo; echo "== $1"; curl -s "${H[@]}" "$1" -o /tmp/r -w "HTTP %{http_code} %{size_download}B\n"; head -c 900 /tmp/r; echo; }
+          t "$B/leafletflights/$FL?as=web"
+          t "$B/leaflet-flights/$FL?as=web"
+          t "$B/leafletflights/$FL/leaflets?as=web&zipCode=97539"
+          t "$B/leaflets/6525892?as=web"
+          t "$B/leaflets/6525892/pages?as=web"
+          t "$B/leaflets/6525892/offers?as=web&limit=200"
+          t "$B/offers/$ID/leaflet?as=web"
