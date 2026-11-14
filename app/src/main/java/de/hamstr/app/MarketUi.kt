@@ -298,11 +298,7 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                         onList = o.url in listIds,
                         onToggleList = { toggleList(o) },
                         onShare = { shareText(ctx, ShareText.offer(o), "Angebot teilen") },
-                        onClick = {
-                            if (!RetailerApps.openSearch(ctx, o.store, RetailerApps.searchTerm(o.displayName, o.brand))) {
-                                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(o.url)))
-                            }
-                        },
+                        onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(o.url))) },
                     )
                 }
                 item {

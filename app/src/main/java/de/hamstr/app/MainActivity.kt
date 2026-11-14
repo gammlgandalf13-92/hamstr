@@ -672,10 +672,8 @@ private fun HitsList(
                 }
             }
             items(storeHits) { h ->
-                // Direkt zum Markt: Händler-App, sonst Website; nur wenn unbekannt die Angebotsseite
-                val open = {
-                    if (!RetailerApps.openSearch(ctx, h.store, RetailerApps.searchTerm(h.title, h.brand))) ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
-                }
+                // Angebot antippen: Angebotsseite bei Marktguru (zur App des Marktes geht es über „App“ an der Kopfzeile)
+                val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
                 if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
                     OfferCard(
                         image = h.image, title = h.title, description = h.description,
