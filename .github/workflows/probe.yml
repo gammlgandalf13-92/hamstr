@@ -21,15 +21,17 @@ jobs:
           H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
           B=https://api.marktguru.de/api/v1
           for f in $(grep -oE 'src="/[a-z0-9.~-]+\.js"' /tmp/p.html | sed 's/src="//;s/"$//'); do curl -s -m 20 -A "$UA" "https://www.marktguru.de$f" >> /tmp/all.js; done
-          timeout 60 python3 - <<'PY'
-          import re
+          timeout 120 python3 - <<'PY'
+          import re,subprocess
           js=open('/tmp/o.js',encoding='utf-8',errors='ignore').read()+open('/tmp/all.js',encoding='utf-8',errors='ignore').read()
-          for key in ['references:function','bestleaflet:function','references(','bestleaflet(']:
-              for m in list(re.finditer(re.escape(key), js))[:2]:
-                  print('==', key, js[m.start()-50:m.start()+350].replace('\n',' '))
+          # Webpack-Chunks nachladen (Definition des API-Clients steckt oft darin)
+          chunks=set(re.findall(r'"(/?[a-z0-9]*\.?[0-9a-f]{20}\.chunk\.js)"',js))|set(re.findall(r'([0-9]{2,4}\.[0-9a-f]{20}\.js)',js))
+          print('chunks', len(chunks))
+          for c in list(chunks)[:80]:
+              u='https://www.marktguru.de/'+c.lstrip('/')
+              try: js+=subprocess.run(['curl','-s','-m','10',u],capture_output=True,text=True).stdout
+              except Exception: pass
+          for pat in [r'bestleaflet', r'best-leaflet', r'leaflets/best', r'/best']:
+              for m in list(re.finditer(pat, js, re.I))[:6]:
+                  print('==',pat, js[max(0,m.start()-160):m.start()+200].replace('\n',' '))
           PY
-          t() { echo; echo "== $1"; curl -s -m 20 "${H[@]}" "$1" -o /tmp/r -w "HTTP %{http_code} %{size_download}B\n"; head -c 700 /tmp/r; echo; }
-          t "$B/offers/25652307/references?as=web"
-          t "$B/offers/25652307/bestleaflet?as=web&zipCode=97539"
-          t "$B/offers/25652307/leaflets/best?as=web&zipCode=97539"
-          t "$B/offers/references/25652307?as=web"
