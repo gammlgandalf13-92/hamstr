@@ -433,4 +433,20 @@ class MatcherTest {
         assertTrue(!Matcher.storeAllowed(wholesale, listOf("edeka")))
         assertTrue(Matcher.storeAllowed(market, listOf("edeka")))
     }
+
+    // ---------------- Händler-Apps
+    @Test fun retailerApps() {
+        val edeka = RetailerApps.retailerFor("E center")!!
+        assertEquals("EDEKA", edeka.label)
+        assertTrue(RetailerApps.nameMatches("EDEKA", edeka))
+        assertTrue(RetailerApps.nameMatches("EDEKA App", edeka))
+        assertTrue(!RetailerApps.nameMatches("EDEKA smart", edeka))   // Mobilfunk, nicht der Markt
+        assertTrue(!RetailerApps.nameMatches("EDEKA24", edeka))
+        val aldi = RetailerApps.retailerFor("ALDI SÜD")!!
+        assertTrue(RetailerApps.nameMatches("ALDI SÜD", aldi))
+        assertTrue(!RetailerApps.nameMatches("ALDI TALK", aldi))
+        assertTrue(RetailerApps.nameMatches("Lidl Plus", RetailerApps.retailerFor("Lidl")!!))
+        assertNull(RetailerApps.retailerFor("EDEKA Foodservice"))
+        assertNull(RetailerApps.retailerFor("Sonstiges"))
+    }
 }

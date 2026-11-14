@@ -209,6 +209,11 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                         IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Zurück") }
                     },
                     actions = {
+                        RetailerApps.buttonText(ctx, target.chain)?.let { label ->
+                            TextButton(onClick = { RetailerApps.open(ctx, target.chain) }) {
+                                Text(label.removeSuffix(" öffnen"))
+                            }
+                        }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Weitere Optionen") }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -278,7 +283,9 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                         EmptyState(Icons.Outlined.ShoppingCart, "Kein Prospekt bei Marktguru",
                             "Für ${target.name} gibt es bei Marktguru in deiner Region (PLZ $plz) keinen Prospekt. " +
                                 "Manche Händler veröffentlichen dort gar nicht oder nur in einigen Regionen – " +
-                                "z. B. Norma oder EDEKA in Nordbayern. Hamstr kann deren Angebote deshalb nicht finden.")
+                                "z. B. Norma oder EDEKA in Nordbayern. Hamstr kann deren Angebote deshalb nicht finden.",
+                            RetailerApps.buttonText(ctx, target.chain)?.let { "Stattdessen: $it" },
+                        ) { RetailerApps.open(ctx, target.chain) }
                     }
                     shown.isEmpty() && offers.isNotEmpty() && !loading -> item {
                         EmptyState(Icons.Filled.Search, "Nichts gefunden", "Anders suchen oder Filter zurücksetzen.")
@@ -291,7 +298,9 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                         onList = o.url in listIds,
                         onToggleList = { toggleList(o) },
                         onShare = { shareText(ctx, ShareText.offer(o), "Angebot teilen") },
-                        onClick = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(o.url))) },
+                        onClick = {
+                            if (!RetailerApps.open(ctx, o.store)) ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(o.url)))
+                        },
                     )
                 }
                 item {
@@ -319,7 +328,8 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
 
 /** Kleine Leiste „Prospekte: REWE · Lidl · …“ über den Ergebnissen. */
 @Composable
-fun ProspectChips(targets: List<MarketTarget>, onOpen: (MarketTarget) -> Unit) {
+fun ProspectChips(targets: List<MarketTarget>, noProspect: (MarketTarget) -> Boolean = { false }, onOpen: (MarketTarget) -> Unit) {
+    val ctx = LocalContext.current
     if (targets.isEmpty()) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -327,6 +337,15 @@ fun ProspectChips(targets: List<MarketTarget>, onOpen: (MarketTarget) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         item { Text("Prospekte:", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        items(targets) { t -> AssistChip(onClick = { onOpen(t) }, label = { Text(t.name) }) }
+        items(targets) { t ->
+            val external = noProspect(t) && RetailerApps.retailerFor(t.chain) != null
+            AssistChip(
+                onClick = { onOpen(t) },
+                label = {
+                    Text(if (!external) t.name
+                    else if (RetailerApps.hasApp(ctx, t.chain)) "${t.name}-App ↗" else "${t.name}-Website ↗")
+                },
+            )
+        }
     }
 }

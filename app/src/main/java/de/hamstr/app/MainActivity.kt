@@ -446,6 +446,12 @@ private fun StoreHeader(store: String, count: Int, onOpen: () -> Unit, favorite:
                 Text(store, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
                 Text(if (count == 1) "1 Angebot" else "$count Angebote", style = MaterialTheme.typography.bodySmall)
             }
+            val ctx = LocalContext.current
+            val appText = remember(store) { if (RetailerApps.retailerFor(store) == null) null
+                else if (RetailerApps.hasApp(ctx, store)) "App" else "Website" }
+            if (appText != null) {
+                TextButton(onClick = { RetailerApps.open(ctx, store) }) { Text(appText) }
+            }
             Text("Prospekt", style = MaterialTheme.typography.labelLarge)
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Alle Angebote des Marktes")
         }
@@ -486,8 +492,7 @@ fun HitsScreen(
         val known = hits.map { it.store to it.storeSlug } +
             store.priceLog().values.flatten().map { it.store to it.storeSlug } +
             store.shoppingList().map { it.store to it.storeSlug }
-        // Märkte ohne Prospekt bei Marktguru (zuletzt geprüft vor < 7 Tagen) nicht anbieten
-        MarketBrowse.targets(store.stores, store.favoriteChains, known).filterNot { store.hasNoProspect(it.chain) }
+        MarketBrowse.targets(store.stores, store.favoriteChains, known)
     }
     val actions = HitActions(
         onOpenMarket = { name, slug ->
@@ -533,7 +538,11 @@ fun HitsScreen(
     Column(Modifier.fillMaxSize()) {
         if (status != "no_plz") {
             Spacer(Modifier.height(8.dp))
-            ProspectChips(prospects) { market = it }
+            // Märkte ohne Prospekt bei Marktguru (z. B. EDEKA hier, Norma) öffnen direkt die Händler-App
+            ProspectChips(prospects, noProspect = { store.hasNoProspect(it.chain) }) { t ->
+                val external = store.hasNoProspect(t.chain) && RetailerApps.open(ctx, t.chain)
+                if (!external) market = t
+            }
         }
         if (showTabs) {
             TabRow(selectedTabIndex = pager.currentPage.coerceAtMost(weeks.lastIndex)) {
@@ -663,7 +672,10 @@ private fun HitsList(
                 }
             }
             items(storeHits) { h ->
-                val open = { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url))) }
+                // Direkt zum Markt: Händler-App, sonst Website; nur wenn unbekannt die Angebotsseite
+                val open = {
+                    if (!RetailerApps.open(ctx, h.store)) ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(h.url)))
+                }
                 if (h.price != null || h.validFrom.isNotBlank() || h.description.isNotBlank()) {
                     OfferCard(
                         image = h.image, title = h.title, description = h.description,

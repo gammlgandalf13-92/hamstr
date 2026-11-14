@@ -14,6 +14,30 @@
     <!-- Updates installieren (Android fragt den Nutzer trotzdem jedes Mal) -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Händler-Apps öffnen (EDEKA, REWE, Lidl …); dazu Startbildschirm-Apps nach Namen finden -->
+    <queries>
+        <package android:name="de.edeka.genuss" />
+        <package android:name="de.edeka.app" />
+        <package android:name="de.rewe.app.mobile" />
+        <package android:name="de.rewe.app" />
+        <package android:name="com.lidl.eci.lidlplus" />
+        <package android:name="de.sec.mobile" />
+        <package android:name="de.apptiv.business.android.aldi_de" />
+        <package android:name="de.aldinord.android" />
+        <package android:name="de.aldi.nord.app" />
+        <package android:name="com.valuephone.vpnetto" />
+        <package android:name="de.penny.app" />
+        <package android:name="de.penny.mobile" />
+        <package android:name="com.kaufland.Kaufland" />
+        <package android:name="de.norma.app" />
+        <package android:name="de.norma.mobile" />
+        <package android:name="com.norma.app" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

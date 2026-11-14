@@ -166,13 +166,21 @@ fun ShoppingScreen(store: Store, onChanged: () -> Unit) {
             )
             groups.forEach { (storeName, list) ->
                 item(key = "h|$storeName") {
-                    Text(storeName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+                        Text(storeName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        // Im Laden praktisch: direkt in die App des Marktes (Coupons, Kundenkarte)
+                        RetailerApps.buttonText(ctx, storeName)?.let { label ->
+                            TextButton(onClick = { RetailerApps.open(ctx, storeName) }) { Text(label) }
+                        }
+                    }
                 }
                 items(list, key = { "o|" + it.id }) { item ->
                     SwipeRow(onRemove = { remove(item) }) {
                         ShoppingRow(item, onToggle = { toggle(item) }) {
-                            if (item.url.isNotBlank()) ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+                            if (!RetailerApps.open(ctx, item.store) && item.url.isNotBlank()) {
+                                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
+                            }
                         }
                     }
                 }
