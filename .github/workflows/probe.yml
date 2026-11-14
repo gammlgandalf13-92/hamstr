@@ -5,35 +5,32 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Prospekt-Aufbau
         run: |
           set +e
           UA="Hamstr/1.0 (Android; privat)"
-          HTML=$(curl -s -A "$UA" https://www.marktguru.de/)
+          HTML=$(curl -s -m 20 -A "$UA" https://www.marktguru.de/)
           API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
           CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
-          H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
-          B=https://api.marktguru.de/api/v1
-          curl -s "${H[@]}" "$B/leaflets/6525892?as=web" -o /tmp/l.json
-          python3 - <<'PY'
-          import json
+          curl -s -m 20 -H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA" "https://api.marktguru.de/api/v1/leaflets/6525892?as=web" -o /tmp/l.json
+          curl -s -m 20 -A "$UA" "https://www.marktguru.de/offers/25652307" -o /tmp/p.html
+          JS=$(grep -oE 'src="/offer[^"]+\.js"' /tmp/p.html | head -1 | sed 's/src="//;s/"$//')
+          curl -s -m 20 -A "$UA" "https://www.marktguru.de$JS" -o /tmp/o.js
+          timeout 60 python3 - <<'PY'
+          import json,re
           d=json.load(open('/tmp/l.json'))
           print('keys', sorted(d.keys()))
-          def walk(o,p=''):
-              if isinstance(o,dict):
-                  for k,v in o.items():
-                      if isinstance(v,(dict,list)): walk(v,p+'.'+k)
-              elif isinstance(o,list) and o:
-                  print('list', p, len(o), 'first:', json.dumps(o[0])[:300]); walk(o[0],p+'[0]')
-          walk(d)
+          for k,v in d.items():
+              if isinstance(v,list) and v:
+                  print('list', k, len(v), 'first:', json.dumps(v[0])[:600])
+              elif isinstance(v,dict):
+                  print('dict', k, json.dumps(v)[:200])
           s=json.dumps(d); print('25652307 in leaflet:', '25652307' in s)
+          js=open('/tmp/o.js',encoding='utf-8',errors='ignore').read()
+          i=js.find('pageflip,null!=o?o:{leafletId:i,pageIndex:0}')
+          print('== JS vor pageflip:', js[max(0,i-900):i+60] if i>=0 else 'nicht gefunden')
+          for m in sorted(set(re.findall(r'["`](/[a-z-]+/[^"`]{0,80}(?:leaflet|flight|page)[^"`]{0,60})["`]', js)))[:20]:
+              print('path', m)
           PY
-          echo "== JS: Funktion hinter Im Prospekt ansehen"
-          curl -s -A "$UA" "https://www.marktguru.de/offers/25652307" -o /tmp/p.html
-          JS=$(grep -oE 'src="/offer[^"]+\.js"' /tmp/p.html | head -1 | sed 's/src="//;s/"$//')
-          curl -s -A "$UA" "https://www.marktguru.de$JS" -o /tmp/o.js
-          grep -oE '.{0,700}C\.JZ\.pageflip,null!=o\?o:\{leafletId:i,pageIndex:0\}' /tmp/o.js | head -1
-          echo; echo "== API-Pfade im JS"
-          grep -oE '"/[a-z-]+(/[a-zA-Z:{}$]+){0,4}"|`/[a-z-]+[^`]{0,80}`' /tmp/o.js | grep -iE 'leaf|flight|page' | sort -u | head -20
-          for c in $(grep -oE 'r\.e\([0-9]+\)' /tmp/o.js | head -0); do :; done
