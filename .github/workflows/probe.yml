@@ -6,41 +6,28 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Endpunkte prüfen
+      - name: Händlernamen prüfen
         run: |
           set +e
           UA="Hamstr/1.0 (Android; privat)"
-          HTML=$(curl -s -A "$UA" https://www.marktguru.de/r/rewe)
+          HTML=$(curl -s -A "$UA" https://www.marktguru.de/)
           API=$(echo "$HTML" | grep -oP '"apiKey"\s*:\s*"\K[^"]+' | head -1)
           CLI=$(echo "$HTML" | grep -oP '"clientKey"\s*:\s*"\K[^"]+' | head -1)
-          echo "== JS: Kontext um offers/search und retailerIds"
-          for js in $(echo "$HTML" | grep -oE 'src="[^"]+\.js"' | sed 's/src="//;s/"$//' | head -30); do
-            case "$js" in http*) u="$js";; //*) u="https:$js";; *) u="https://www.marktguru.de$js";; esac
-            curl -s -A "$UA" "$u" | grep -oE '.{0,120}(offers/search|retailerIds|retailerId=|leaflets/search|/leaflets/\$|industryId).{0,160}' | head -6
-          done | sort -u | head -30
           H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
           B=https://api.marktguru.de/api/v1
-          sum() { python3 - "$1" <<'PY'
+          for q in butter milch kaffee nudeln joghurt bier "edeka" "e center" "edeka center" "marktkauf" "norma" "edeka nordbayern" "e-center"; do
+            curl -s "${H[@]}" "$B/offers/search?as=web&limit=100&offset=0&q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$q")&zipCode=97539" -o /tmp/o.json
+            python3 - "$q" <<'PY'
           import json,sys,collections
-          try:
-              d=json.load(open('/tmp/o.json'))
-          except Exception as e:
-              print('kein JSON', open('/tmp/o.json').read()[:300]); sys.exit()
+          d=json.load(open('/tmp/o.json'))
           r=d.get('results') or []
-          c=collections.Counter(a.get('name') for x in r for a in (x.get('advertisers') or [{}]))
-          v=collections.Counter((x.get('validityDates') or [{}])[0].get('from','')[:10] for x in r)
-          print('total',d.get('totalResults'),'got',len(r),'advertisers',dict(c.most_common(5)),'from',dict(v.most_common(4)))
-          if r: print('cats', collections.Counter((x.get('categories') or [{}])[0].get('name') if x.get('categories') else None for x in r).most_common(6))
-          if r: print('sample', {k:r[0].get(k) for k in ('id','price','oldPrice','description','categories','product')} )
+          ret=[(x.get('name'),x.get('resultsCount')) for x in ((d.get('filters') or {}).get('retailers') or [])]
+          adv=collections.Counter((a.get('name'),a.get('uniqueName')) for x in r for a in (x.get('advertisers') or []))
+          print(f"q={sys.argv[1]!r} total={d.get('totalResults')} retailers={ret}")
+          print("   advertisers:", [k for k in adv if k[0] and ('ede' in k[0].lower() or 'center' in k[0].lower() or 'norma' in k[0].lower() or 'kauf' in k[0].lower())] or list(adv)[:6])
+          if sys.argv[1]=='norma':
+              for x in r[:3]: print('   norma-hit:', (x.get('product') or {}).get('name'), [a.get('name') for a in x.get('advertisers') or []], x.get('validityDates'))
           PY
-          }
-          try() { echo; echo "== $1"; curl -s -o /tmp/o.json -w "HTTP %{http_code} %{size_download}B\n" "${H[@]}" "$1"; sum; }
-          try "$B/offers/search?as=web&limit=100&offset=0&q=rewe&zipCode=97539"
-          try "$B/offers/search?as=web&limit=100&offset=200&q=rewe&zipCode=97539"
-          try "$B/offers/search?as=web&limit=100&offset=0&q=rewe&zipCode=97539&retailerIds=126802"
-          try "$B/offers/search?as=web&limit=100&offset=0&q=*&zipCode=97539&retailerIds=126802"
-          try "$B/offers/search?as=web&limit=100&offset=0&q=lidl&zipCode=97539"
-          try "$B/offers/search?as=web&limit=100&offset=0&q=aldi%20s%C3%BCd&zipCode=97539"
-          try "$B/offers/search?as=web&limit=100&offset=0&q=edeka&zipCode=97539"
-          try "$B/leaflets/search?as=web&limit=10&offset=0&zipCode=97539&q=rewe"
-          try "$B/industries/supermaerkte/offers?as=web&limit=20&offset=0&zipCode=97539"
+          done
+          echo "== Händlerseiten"
+          for s in edeka e-center edeka-center norma marktkauf; do echo "$s: $(curl -s -o /dev/null -w '%{http_code}' -A "$UA" https://www.marktguru.de/r/$s)"; done
