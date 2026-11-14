@@ -6,22 +6,29 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: EDEKA-Website prüfen
+      - name: kaufDA prüfen
         run: |
           set +e
           UA="Mozilla/5.0 (Linux; Android 14) Hamstr/1.0 (privat)"
-          t() { echo; echo "== $1"; curl -s -L -A "$UA" -H "Accept: application/json, text/html" -o /tmp/r -w "HTTP %{http_code} %{content_type} %{size_download}B %{url_effective}\n" "$1"; head -c 700 /tmp/r | tr '\n' ' '; echo; }
-          t "https://www.edeka.de/api/marketsearch/markets?searchstring=97437"
-          t "https://www.edeka.de/api/marketsearch/markets?searchstring=Ha%C3%9Ffurt"
-          t "https://www.edeka.de/api/marketsearch/markets?coordinates=lat%3D50.03%26lon%3D10.51&maxDistance=15000"
-          t "https://www.edeka.de/eh/service/eh/ods/markets?searchstring=97437"
-          t "https://www.edeka.de/api/offers?marketId=4314021182307&limit=5"
-          t "https://www.edeka.de/eh/service/eh/offers?marketId=4314021182307&limit=5"
-          t "https://www.edeka.de/api/offers?limit=5"
-          echo; echo "== Startseite: api-Pfade in HTML/JS"
-          curl -s -A "$UA" https://www.edeka.de/ -o /tmp/home.html; echo "home $(wc -c </tmp/home.html)B"
-          grep -oE '"/api/[A-Za-z0-9/_-]+|/eh/service/[A-Za-z0-9/_-]+' /tmp/home.html | sort -u | head -20
-          for js in $(grep -oE 'src="[^"]+\.js[^"]*"' /tmp/home.html | sed 's/src="//;s/"$//' | head -30); do
-            case "$js" in http*) u="$js";; //*) u="https:$js";; *) u="https://www.edeka.de$js";; esac
-            curl -s -A "$UA" "$u" | grep -oE '.{0,40}(/api/(offers|marketsearch|markets)[A-Za-z0-9/_?=&{}$.-]*|/eh/service/[A-Za-z0-9/_-]+).{0,80}' | head -5
-          done | sort -u | head -30
+          for u in "https://www.kaufda.de/Hassfurt/EDEKA-Frischemarkt/p-r292" "https://www.kaufda.de/Hassfurt/EDEKA/p-r292" "https://www.kaufda.de/Angebote/Hassfurt/EDEKA"; do
+            echo; echo "== $u"
+            curl -s -L -A "$UA" -o /tmp/k.html -w "HTTP %{http_code} %{size_download}B %{url_effective}\n" "$u"
+            python3 - <<'PY'
+          import re,json
+          h=open('/tmp/k.html',encoding='utf-8',errors='ignore').read()
+          m=re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>',h,re.S)
+          print('next_data:', bool(m), 'len', len(h))
+          print('titles:', re.findall(r'<title>(.*?)</title>',h)[:1])
+          if m:
+              d=json.loads(m.group(1))
+              s=json.dumps(d)
+              print('keys', list(d.get('props',{}).get('pageProps',{}).keys())[:30])
+              for k in ['offers','brochures','contents','products','publisher']:
+                  print(k, s.count('"%s"'%k))
+              # Beispiele für Angebote mit Preis
+              for mm in list(re.finditer(r'"(name|title)":"([^"]{3,60})"[^{}]{0,200}?"price[a-zA-Z]*":\s*\{?[^}]{0,80}',s))[:8]:
+                  print('  ', mm.group(0)[:200])
+              apis=sorted(set(re.findall(r'https?://[a-z0-9.-]*(?:bonial|kaufda)[a-z0-9.-]*/[A-Za-z0-9/_.-]{3,60}',s)))
+              print('apis', apis[:15])
+          PY
+          done
