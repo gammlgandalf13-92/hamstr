@@ -164,6 +164,9 @@ fun MarketList(store: Store, refreshKey: Int) {
                             }
                             searched -> "nicht im Umkreis"
                             else -> null
+                        }.let { s ->
+                            if (store.hasNoProspect(key)) listOfNotNull(s, "kein Prospekt bei Marktguru in deiner Region").joinToString(" · ")
+                            else s
                         }
                         sub?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }

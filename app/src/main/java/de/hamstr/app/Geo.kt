@@ -141,6 +141,8 @@ object Geo {
     fun chainKey(brand: String): String {
         val n = Matcher.norm(brand)
         return when {
+            // Großhandel für Gastronomie (z. B. „EDEKA Foodservice“) ist kein Supermarkt
+            Matcher.isWholesale(n) -> "grosshandel"
             n.startsWith("aldi") -> "aldi"
             n.startsWith("edeka") || n.startsWith("e center") || n.startsWith("e aktiv") || n.startsWith("e neukauf") -> "edeka"
             n.startsWith("rewe") -> "rewe"

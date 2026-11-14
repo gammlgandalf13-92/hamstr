@@ -159,9 +159,16 @@ object Matcher {
 
     private fun approx(a: Double, b: Double, tol: Double) = b > 0 && kotlin.math.abs(a - b) / b <= tol
 
+    /** Großhändler für Gastronomie – deren Angebote gelten nicht für Endkunden im Supermarkt. */
+    fun isWholesale(name: String): Boolean {
+        val n = norm(name)
+        return "foodservice" in n || n.startsWith("handelshof") || "c c" in n || n.startsWith("metro")
+    }
+
     fun storeAllowed(offer: Offer, allowed: List<String>): Boolean {
         if (allowed.isEmpty()) return true
         val slug = norm(offer.storeSlug + " " + offer.store)
+        if (isWholesale(slug) && allowed.none { isWholesale(it) || norm(it) == "grosshandel" }) return false
         return allowed.any { norm(it).isNotEmpty() && norm(it) in slug }
     }
 

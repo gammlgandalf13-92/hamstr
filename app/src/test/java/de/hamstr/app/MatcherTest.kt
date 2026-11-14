@@ -421,4 +421,16 @@ class MatcherTest {
         assertEquals("REWE: Gouda jung (Angebot)", ShareText.offer(offers[0]))
         assertEquals("u1", ShoppingItem.fromOffer(offers[0]).id)
     }
+
+    // ---------------- Großhandel ist kein Supermarkt
+    @Test fun wholesaleIsNotEdeka() {
+        assertEquals("grosshandel", Geo.chainKey("EDEKA Foodservice"))
+        assertEquals("grosshandel", Geo.chainKey("Handelshof"))
+        assertEquals("edeka", Geo.chainKey("E center"))
+        assertEquals("edeka", Geo.chainKey("EDEKA"))
+        val wholesale = Offer("1", "EDEKA Foodservice", "edeka-foodservice-handelshof", "Butter", "", "", 1.0, null, "", "", "u")
+        val market = Offer("2", "EDEKA", "edeka", "Butter", "", "", 1.0, null, "", "", "u")
+        assertTrue(!Matcher.storeAllowed(wholesale, listOf("edeka")))
+        assertTrue(Matcher.storeAllowed(market, listOf("edeka")))
+    }
 }

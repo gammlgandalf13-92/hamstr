@@ -486,7 +486,8 @@ fun HitsScreen(
         val known = hits.map { it.store to it.storeSlug } +
             store.priceLog().values.flatten().map { it.store to it.storeSlug } +
             store.shoppingList().map { it.store to it.storeSlug }
-        MarketBrowse.targets(store.stores, store.favoriteChains, known)
+        // Märkte ohne Prospekt bei Marktguru (zuletzt geprüft vor < 7 Tagen) nicht anbieten
+        MarketBrowse.targets(store.stores, store.favoriteChains, known).filterNot { store.hasNoProspect(it.chain) }
     }
     val actions = HitActions(
         onOpenMarket = { name, slug ->

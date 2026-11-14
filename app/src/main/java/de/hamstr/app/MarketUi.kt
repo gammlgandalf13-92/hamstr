@@ -143,6 +143,7 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
             offers.addAll(page.offers.filter { it.id !in known })
             total = page.total
             offset += 100
+            if (isDone()) store.setNoProspect(target.chain, plz, offers.isEmpty())
         } catch (e: Exception) {
             error = "Angebote konnten nicht geladen werden. Bitte später noch einmal versuchen."
         } finally {
@@ -195,8 +196,10 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                             Text(
                                 when {
                                     total < 0 -> "Prospekt wird geladen…"
-                                    total == 0 -> "keine Angebote gefunden"
-                                    else -> "$total Angebote · PLZ $plz"
+                                    // Fertig geladen: nur die Angebote, die wirklich von diesem Markt sind
+                                    isDone() && offers.isEmpty() -> "kein Prospekt · PLZ $plz"
+                                    isDone() -> "${offers.size} Angebote · PLZ $plz"
+                                    else -> "ca. $total Angebote · PLZ $plz"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -271,9 +274,11 @@ fun MarketScreen(store: Store, target: MarketTarget, onClose: () -> Unit, onShop
                     !Regex("\\d{5}").matches(plz) -> item {
                         EmptyState(Icons.Outlined.ShoppingCart, "PLZ fehlt", "Trag in den Einstellungen deine PLZ ein, damit Hamstr den Prospekt für deine Region lädt.")
                     }
-                    total == 0 && !loading -> item {
-                        EmptyState(Icons.Outlined.ShoppingCart, "Kein Prospekt gefunden",
-                            "Für ${target.name} hat Marktguru in deiner Region gerade keine Angebote.")
+                    isDone() && offers.isEmpty() && !loading -> item {
+                        EmptyState(Icons.Outlined.ShoppingCart, "Kein Prospekt bei Marktguru",
+                            "Für ${target.name} gibt es bei Marktguru in deiner Region (PLZ $plz) keinen Prospekt. " +
+                                "Manche Händler veröffentlichen dort gar nicht oder nur in einigen Regionen – " +
+                                "z. B. Norma oder EDEKA in Nordbayern. Hamstr kann deren Angebote deshalb nicht finden.")
                     }
                     shown.isEmpty() && offers.isNotEmpty() && !loading -> item {
                         EmptyState(Icons.Filled.Search, "Nichts gefunden", "Anders suchen oder Filter zurücksetzen.")

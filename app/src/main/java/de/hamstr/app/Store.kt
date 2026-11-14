@@ -190,6 +190,19 @@ class Store(context: Context) {
         prefs.edit().putString("hits", arr.toString()).apply()
     }
 
+    /** Märkte ohne Prospekt bei Marktguru („kette|plz“ → wann festgestellt). */
+    fun noProspect(): Map<String, Long> = mapFrom(prefs.getString("noProspect", null)) { (it as Number).toLong() }
+
+    fun setNoProspect(chain: String, plz: String, none: Boolean, now: Long = System.currentTimeMillis()) {
+        val map = noProspect().toMutableMap()
+        if (none) map["$chain|$plz"] = now else map.remove("$chain|$plz")
+        prefs.edit().putString("noProspect", JSONObject(map as Map<*, *>).toString()).apply()
+    }
+
+    /** Hat dieser Markt hier (in den letzten 7 Tagen festgestellt) keinen Prospekt? */
+    fun hasNoProspect(chain: String, plz: String = this.plz, now: Long = System.currentTimeMillis()): Boolean =
+        noProspect()["$chain|$plz"]?.let { now - it < 7L * 24 * 60 * 60 * 1000 } ?: false
+
     /** Einrichtungs-Assistent erledigt (oder übersprungen). */
     var setupDone: Boolean
         get() = prefs.getBoolean("setupDone", false)
