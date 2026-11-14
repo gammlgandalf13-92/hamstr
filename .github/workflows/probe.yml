@@ -18,19 +18,18 @@ jobs:
           curl -s -m 20 -A "$UA" "https://www.marktguru.de/offers/25652307" -o /tmp/p.html
           JS=$(grep -oE 'src="/offer[^"]+\.js"' /tmp/p.html | head -1 | sed 's/src="//;s/"$//')
           curl -s -m 20 -A "$UA" "https://www.marktguru.de$JS" -o /tmp/o.js
+          H=(-H "x-apikey: $API" -H "x-clientkey: $CLI" -A "$UA")
+          B=https://api.marktguru.de/api/v1
+          for f in $(grep -oE 'src="/[a-z0-9.~-]+\.js"' /tmp/p.html | sed 's/src="//;s/"$//'); do curl -s -m 20 -A "$UA" "https://www.marktguru.de$f" >> /tmp/all.js; done
           timeout 60 python3 - <<'PY'
-          import json,re
-          d=json.load(open('/tmp/l.json'))
-          print('keys', sorted(d.keys()))
-          for k,v in d.items():
-              if isinstance(v,list) and v:
-                  print('list', k, len(v), 'first:', json.dumps(v[0])[:600])
-              elif isinstance(v,dict):
-                  print('dict', k, json.dumps(v)[:200])
-          s=json.dumps(d); print('25652307 in leaflet:', '25652307' in s)
-          js=open('/tmp/o.js',encoding='utf-8',errors='ignore').read()
-          i=js.find('pageflip,null!=o?o:{leafletId:i,pageIndex:0}')
-          print('== JS vor pageflip:', js[max(0,i-900):i+60] if i>=0 else 'nicht gefunden')
-          for m in sorted(set(re.findall(r'["`](/[a-z-]+/[^"`]{0,80}(?:leaflet|flight|page)[^"`]{0,60})["`]', js)))[:20]:
-              print('path', m)
+          import re
+          js=open('/tmp/o.js',encoding='utf-8',errors='ignore').read()+open('/tmp/all.js',encoding='utf-8',errors='ignore').read()
+          for key in ['references:function','bestleaflet:function','references(','bestleaflet(']:
+              for m in list(re.finditer(re.escape(key), js))[:2]:
+                  print('==', key, js[m.start()-50:m.start()+350].replace('\n',' '))
           PY
+          t() { echo; echo "== $1"; curl -s -m 20 "${H[@]}" "$1" -o /tmp/r -w "HTTP %{http_code} %{size_download}B\n"; head -c 700 /tmp/r; echo; }
+          t "$B/offers/25652307/references?as=web"
+          t "$B/offers/25652307/bestleaflet?as=web&zipCode=97539"
+          t "$B/offers/25652307/leaflets/best?as=web&zipCode=97539"
+          t "$B/offers/references/25652307?as=web"
