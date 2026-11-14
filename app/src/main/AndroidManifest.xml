@@ -29,9 +29,7 @@
         <package android:name="de.penny.app" />
         <package android:name="de.penny.mobile" />
         <package android:name="com.kaufland.Kaufland" />
-        <package android:name="de.norma.app" />
-        <package android:name="de.norma.mobile" />
-        <package android:name="com.norma.app" />
+        <package android:name="de.online.norma" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

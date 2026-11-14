@@ -178,7 +178,7 @@ fun ShoppingScreen(store: Store, onChanged: () -> Unit) {
                 items(list, key = { "o|" + it.id }) { item ->
                     SwipeRow(onRemove = { remove(item) }) {
                         ShoppingRow(item, onToggle = { toggle(item) }) {
-                            if (!RetailerApps.open(ctx, item.store) && item.url.isNotBlank()) {
+                            if (!RetailerApps.openSearch(ctx, item.store, item.title) && item.url.isNotBlank()) {
                                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.url)))
                             }
                         }

@@ -448,5 +448,9 @@ class MatcherTest {
         assertTrue(RetailerApps.nameMatches("Lidl Plus", RetailerApps.retailerFor("Lidl")!!))
         assertNull(RetailerApps.retailerFor("EDEKA Foodservice"))
         assertNull(RetailerApps.retailerFor("Sonstiges"))
+        // Produktsuche (Test) bei REWE, Lidl, Kaufland; sonst nur App/Website
+        assertTrue(RetailerApps.retailerFor("REWE")!!.search!!.contains("{q}"))
+        assertTrue(RetailerApps.retailerFor("Lidl")!!.search!!.contains("{q}"))
+        assertNull(RetailerApps.retailerFor("ALDI SÜD")!!.search)
     }
 }
